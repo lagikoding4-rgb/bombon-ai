@@ -4,6 +4,6 @@
 // Kunci "anon" ini AMAN untuk ditaruh di frontend (memang didesain untuk itu).
 
 window.BOMBON_CONFIG = {
-  SUPABASE_URL: "https://wbcqscyxhgihkhhvhhxs.supabase.co",
-  SUPABASE_ANON_KEY: "sb_publishable_vs-OzpnoFRsDrJJ1yYhd1A_mFgnsP51",
+  SUPABASE_URL: "https://xxxxxxxxxxxx.supabase.co",
+  SUPABASE_ANON_KEY: "ISI_ANON_KEY_KAMU_DI_SINI",
 };
