@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bombon AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="/config.js"></script>
+<style>
+  :root{
+    --bg-deep:#0b111c;
+    --bg-panel:#111a29;
+    --rose:#d6a189;
+    --rose-bright:#e8bfa8;
+    --rose-dim:#a97a68;
+    --ink:#e9edf3;
+    --ink-dim:#8b94a7;
+    --line: rgba(214,161,137,0.14);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background: radial-gradient(ellipse at 50% 0%, #101a2b 0%, var(--bg-deep) 60%);
+    font-family:'Inter', sans-serif;
+    color:var(--ink);
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  .display{font-family:'Space Grotesk', sans-serif;}
+  .screen{ position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    transition: opacity 0.6s ease, visibility 0.6s ease; z-index:10; }
+  .screen.hide{ opacity:0; visibility:hidden; pointer-events:none; }
+
+  /* ===================== SPLASH / LOADING ===================== */
+  #splash{
+    background: radial-gradient(ellipse at 50% 30%, #142238 0%, #0b111c 70%);
+    z-index:100;
+  }
+  .node-field{ position:absolute; inset:0; overflow:hidden; opacity:0.4; }
+  .node-field span{
+    position:absolute; width:3px; height:3px; border-radius:50%;
+    background: var(--rose);
+    box-shadow:0 0 8px 1px rgba(214,161,137,0.6);
+    animation: drift 8s ease-in-out infinite;
+  }
+  @keyframes drift{
+    0%,100%{ transform: translateY(0px) scale(1); opacity:0.25;}
+    50%{ transform: translateY(-14px) scale(1.4); opacity:0.85;}
+  }
+
+  .draw-stage{
+    position:relative; width:200px; height:200px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .draw-stage svg{ width:150px; height:150px; overflow:visible; }
+  .draw-stage svg path{ fill:none; stroke-linecap:round; stroke-linejoin:round; }
+  #pathB{ stroke:var(--rose-bright); stroke-width:7; }
+  #pathNet{ stroke:var(--rose); stroke-width:2.5; }
+  .netdot{ fill:var(--rose-bright); opacity:0; transform-origin:center; }
+
+  .raster-logo{
+    position:absolute; width:150px; height:150px; border-radius:34px;
+    opacity:0; transform:scale(0.82);
+    box-shadow: 0 0 50px rgba(214,161,137,0.3), 0 25px 60px rgba(0,0,0,0.55);
+    transition: opacity 0.7s ease, transform 0.7s cubic-bezier(.2,.9,.25,1.2);
+  }
+  .raster-logo.reveal{ opacity:1; transform:scale(1); }
+  .draw-svg-wrap{ transition: opacity 0.55s ease; }
+  .draw-svg-wrap.fade{ opacity:0; }
+
+  .splash-word{ font-size:25px; font-weight:700; letter-spacing:0.02em; margin-top:26px;
+    opacity:0; transform:translateY(6px); transition:opacity 0.6s ease, transform 0.6s ease; }
+  .splash-word.show{ opacity:1; transform:translateY(0); }
+  .splash-word span{ color:var(--rose-bright); }
+  .splash-tag{ margin-top:7px; font-size:12px; letter-spacing:0.16em; text-transform:uppercase; color:var(--ink-dim);
+    opacity:0; transition:opacity 0.6s ease 0.1s; }
+  .splash-tag.show{ opacity:1; }
+
+  /* ===================== LOGIN ===================== */
+  #login{ z-index:90; }
+  .login-card{
+    width:360px; max-width:88vw;
+    background: var(--bg-panel);
+    border:1px solid var(--line);
+    border-radius:22px;
+    padding:38px 30px 30px;
+    text-align:center;
+    box-shadow:0 30px 80px rgba(0,0,0,0.5);
+  }
+  .login-logo{ width:66px; height:66px; border-radius:16px; margin:0 auto 18px; display:block;
+    box-shadow:0 10px 30px rgba(214,161,137,0.2); }
+  .login-title{ font-family:'Space Grotesk'; font-size:19px; font-weight:600; margin-bottom:6px; }
+  .login-sub{ font-size:13px; color:var(--ink-dim); margin-bottom:28px; line-height:1.5; }
+
+  .google-btn{
+    width:100%; display:flex; align-items:center; justify-content:center; gap:10px;
+    background:#fff; color:#1f1f1f; border:none; border-radius:12px;
+    padding:12px 16px; font-size:14px; font-weight:600; font-family:'Inter';
+    cursor:pointer; transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .google-btn:hover{ transform:translateY(-1px); box-shadow:0 8px 22px rgba(255,255,255,0.12); }
+  .google-btn:active{ transform:translateY(0); }
+  .google-btn svg{ width:18px; height:18px; }
+
+  .login-foot{ margin-top:20px; font-size:11px; color:var(--ink-dim); line-height:1.6; }
+
+  .connecting-row{
+    display:none; align-items:center; justify-content:center; gap:10px;
+    margin-top:18px; font-size:12.5px; color:var(--ink-dim);
+  }
+  .connecting-row.show{ display:flex; }
+  .spin{
+    width:14px; height:14px; border-radius:50%;
+    border:2px solid rgba(214,161,137,0.25); border-top-color:var(--rose-bright);
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .account-picker{ display:none; text-align:left; margin-top:6px; }
+  .account-picker.show{ display:block; }
+  .account-row{
+    display:flex; align-items:center; gap:12px;
+    padding:11px 12px; border-radius:12px; border:1px solid var(--line);
+    cursor:pointer; transition:background 0.15s ease;
+  }
+  .account-row:hover{ background:rgba(214,161,137,0.08); }
+  .account-avatar{
+    width:34px; height:34px; border-radius:50%; flex-shrink:0;
+    background:linear-gradient(135deg,#6b8cff,#4a5fd6);
+    display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:#fff;
+  }
+  .account-name{ font-size:13.5px; font-weight:500; color:var(--ink); }
+  .account-email{ font-size:11.5px; color:var(--ink-dim); }
+
+  /* ===================== APP ===================== */
+  #app{ position:fixed; inset:0; display:flex; opacity:0; visibility:hidden; transition:opacity 0.55s ease; z-index:5; }
+  #app.show{ opacity:1; visibility:visible; }
+
+  .sidebar{ width:272px; min-width:272px; background: var(--bg-panel); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; padding:18px 14px;
+    position:fixed; top:0; bottom:0; left:0; transform:translateX(-100%);
+    transition: transform 0.28s cubic-bezier(.4,0,.2,1);
+    z-index:30; }
+  .sidebar.open{ transform:translateX(0); box-shadow:20px 0 50px rgba(0,0,0,0.35); }
+  .sidebar-overlay{ position:fixed; inset:0; background:rgba(5,8,14,0.55); opacity:0; visibility:hidden;
+    transition:opacity 0.28s ease, visibility 0.28s ease; z-index:25; }
+  .sidebar-overlay.show{ opacity:1; visibility:visible; }
+  .sidebar-close{ margin-left:auto; background:none; border:none; cursor:pointer; padding:4px; }
+  .sidebar-close svg{ width:16px; height:16px; stroke:var(--ink-dim); }
+  .brand-row{ display:flex; align-items:center; gap:10px; padding:6px 6px 20px 6px; }
+  .brand-logo{ width:34px; height:34px; border-radius:9px; box-shadow:0 4px 14px rgba(0,0,0,0.4); }
+  .brand-name{ font-family:'Space Grotesk'; font-weight:600; font-size:15.5px; }
+  .brand-name span{ color:var(--rose-bright); }
+
+  .new-chat-btn{ display:flex; align-items:center; gap:9px;
+    background: linear-gradient(135deg, rgba(214,161,137,0.14), rgba(214,161,137,0.05));
+    border:1px solid var(--line); color:var(--ink); font-size:13.5px; font-weight:500;
+    padding:10px 13px; border-radius:10px; cursor:pointer; margin-bottom:18px;
+    transition: border-color 0.2s ease, background 0.2s ease; }
+  .new-chat-btn:hover{ border-color: var(--rose-dim); background: rgba(214,161,137,0.18); }
+  .new-chat-btn svg{ width:15px; height:15px; stroke:var(--rose-bright); flex-shrink:0; }
+
+  .side-label{ font-size:10.5px; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-dim); padding:4px 8px 8px; }
+  .history-item{ padding:9px 10px; border-radius:8px; font-size:13px; color:var(--ink-dim);
+    cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    transition: background 0.15s ease, color 0.15s ease; }
+  .history-item:hover{ background: rgba(255,255,255,0.04); color:var(--ink); }
+  .history-item.active{ background: rgba(214,161,137,0.1); color:var(--rose-bright); }
+
+  .sidebar-footer{ margin-top:auto; padding-top:14px; border-top:1px solid var(--line);
+    display:flex; align-items:center; gap:10px; padding:10px 8px 4px; cursor:pointer; }
+  .avatar-g{ width:28px; height:28px; border-radius:50%; background:linear-gradient(135deg,#6b8cff,#4a5fd6);
+    display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#fff; flex-shrink:0; }
+  .user-name{ font-size:12.5px; color:var(--ink); }
+  .user-plan{ font-size:10.5px; color:var(--ink-dim); }
+
+  .main{ flex:1; display:flex; flex-direction:column; min-width:0; background: var(--bg-deep); }
+  .topbar{ height:56px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
+    padding:0 22px; border-bottom:1px solid var(--line); gap:14px; }
+  .topbar-left{ display:flex; align-items:center; gap:14px; min-width:0; }
+  .menu-btn{ width:32px; height:32px; flex-shrink:0; border-radius:8px; background:none; border:none;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .menu-btn:hover{ background:rgba(255,255,255,0.06); }
+  .menu-btn svg{ width:18px; height:18px; stroke:var(--ink); }
+  .topbar-title{ font-family:'Space Grotesk'; font-size:14.5px; font-weight:500; color:var(--ink);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .topbar-title .dot{ color:var(--rose-bright); }
+  .model-pill{ font-size:11.5px; color:var(--ink-dim); border:1px solid var(--line); padding:5px 11px; border-radius:20px; flex-shrink:0; }
+
+  .chat-scroll{ flex:1; overflow-y:auto; padding:30px 0 20px; }
+  .chat-inner{ max-width:740px; margin:0 auto; padding:0 26px; }
+
+  .msg{ display:flex; gap:14px; margin-bottom:24px; align-items:flex-start; }
+  .msg-avatar{ width:30px; height:30px; border-radius:9px; flex-shrink:0; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .msg-avatar.ai{ background: linear-gradient(135deg, #16223a, #0e1726); border:1px solid var(--line); }
+  .msg-avatar.ai img{ width:100%; height:100%; border-radius:9px; }
+  .msg-avatar.user{ border-radius:50%; }
+  .msg-avatar.user img{ width:100%; height:100%; border-radius:50%; }
+  .msg-body{ flex:1; padding-top:4px; min-width:0; }
+  .msg-name{ font-size:12px; color:var(--ink-dim); margin-bottom:5px; }
+  .msg-text{ font-size:14.5px; line-height:1.65; color:#c7cee0; }
+  .msg-text b{ color:var(--ink); }
+  .msg-text p{ margin-bottom:10px; }
+  .msg-text p:last-child{ margin-bottom:0; }
+  .msg-text pre{ background:#0d1420; border:1px solid var(--line); border-radius:10px; padding:14px 16px;
+    overflow-x:auto; margin:10px 0; font-size:12.5px; }
+  .msg-text code{ font-family:'JetBrains Mono', monospace; }
+  .msg-text :not(pre) > code{ background:rgba(214,161,137,0.12); padding:1px 5px; border-radius:5px; font-size:12.8px; color:var(--rose-bright); }
+  .code-lang{ font-size:10.5px; color:var(--ink-dim); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px; }
+
+  .img-chip-in-msg{ max-width:220px; border-radius:12px; border:1px solid var(--line); margin-bottom:8px; display:block; }
+
+  .typing{ display:inline-flex; gap:4px; padding-top:2px; }
+  .typing span{ width:6px; height:6px; border-radius:50%; background:var(--rose-bright); animation: bounce 1.3s infinite ease-in-out; }
+  .typing span:nth-child(2){ animation-delay:0.15s; }
+  .typing span:nth-child(3){ animation-delay:0.3s; }
+  @keyframes bounce{ 0%,60%,100%{ transform:translateY(0); opacity:0.4; } 30%{ transform:translateY(-5px); opacity:1; } }
+
+  .input-zone{ padding:12px 26px 20px; }
+  .input-inner{ max-width:740px; margin:0 auto; }
+  .attach-preview{ display:none; align-items:center; gap:8px; margin-bottom:8px;
+    background:var(--bg-panel); border:1px solid var(--line); border-radius:10px; padding:6px 10px; width:fit-content; }
+  .attach-preview.show{ display:flex; }
+  .attach-preview img{ width:30px; height:30px; border-radius:6px; object-fit:cover; }
+  .attach-preview span{ font-size:12px; color:var(--ink-dim); }
+  .attach-preview button{ background:none; border:none; color:var(--ink-dim); cursor:pointer; font-size:14px; }
+
+  .input-box{ display:flex; align-items:flex-end; gap:8px; background: var(--bg-panel); border:1px solid var(--line);
+    border-radius:16px; padding:10px 10px 10px 8px; transition: border-color 0.2s ease; }
+  .input-box:focus-within{ border-color: var(--rose-dim); }
+  .icon-btn{ width:34px; height:34px; border-radius:10px; flex-shrink:0; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; background:transparent; border:none; }
+  .icon-btn:hover{ background:rgba(255,255,255,0.05); }
+  .icon-btn svg{ width:17px; height:17px; stroke:var(--ink-dim); }
+  .input-box textarea{ flex:1; background:transparent; border:none; outline:none; resize:none;
+    color:var(--ink); font-family:'Inter'; font-size:14px; line-height:1.5; max-height:120px; padding:7px 0; }
+  .input-box textarea::placeholder{ color:var(--ink-dim); }
+  .send-btn{ width:34px; height:34px; border-radius:10px; flex-shrink:0;
+    background: linear-gradient(135deg, var(--rose-bright), var(--rose-dim));
+    display:flex; align-items:center; justify-content:center; cursor:pointer; border:none; }
+  .send-btn svg{ width:16px; height:16px; stroke:#0b111c; }
+  .input-hint{ text-align:center; font-size:11px; color:var(--ink-dim); margin-top:10px; }
+
+  ::-webkit-scrollbar{ width:8px; }
+  ::-webkit-scrollbar-thumb{ background:rgba(214,161,137,0.18); border-radius:4px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+</style>
+</head>
+<body>
+
+  <!-- ===================== SPLASH ===================== -->
+  <div id="splash" class="screen">
+    <div class="node-field" id="nodeField"></div>
+    <div class="draw-stage">
+      <div class="draw-svg-wrap" id="drawWrap">
+        <svg viewBox="0 0 150 150">
+          <path id="pathB" d="M46,32 C46,32 78,32 78,55 C78,74 58,74 58,74 C58,74 82,74 82,98 C82,120 46,120 46,120" />
+          <path id="pathNet" d="M92,44 L114,32 L128,50 L118,74 L96,82 L88,60 Z M114,32 L88,60 M128,50 L96,82" />
+          <circle class="netdot" cx="114" cy="32" r="4"/>
+          <circle class="netdot" cx="128" cy="50" r="4"/>
+          <circle class="netdot" cx="118" cy="74" r="4"/>
+          <circle class="netdot" cx="96" cy="82" r="4"/>
+          <circle class="netdot" cx="88" cy="60" r="4"/>
+          <circle class="netdot" cx="92" cy="44" r="4"/>
+        </svg>
+      </div>
+      <img class="raster-logo" id="rasterLogo" src="/assets/logo.jpg" alt="Bombon AI">
+    </div>
+    <div class="splash-word display" id="splashWord">BOMBON <span>AI</span></div>
+    <div class="splash-tag" id="splashTag">Menyiapkan sesi&hellip;</div>
+  </div>
+
+  <!-- ===================== LOGIN ===================== -->
+  <div id="login" class="screen hide">
+    <div class="login-card">
+      <img class="login-logo" src="/assets/logo.jpg" alt="Bombon AI">
+      <div class="login-title display">Masuk ke Bombon AI</div>
+      <div class="login-sub">Masuk untuk menyimpan riwayat obrolan dan melanjutkan kapan saja.</div>
+
+      <button class="google-btn" id="googleBtn">
+        <svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.4-.1-2.5-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.8 1.1 8 3l6-6C34.6 5.1 29.6 3 24 3 16 3 9.1 7.6 6.3 14.7z"/><path fill="#4CAF50" d="M24 45c5.5 0 10.4-1.9 14.2-5.1l-6.6-5.4C29.6 36 26.9 37 24 37c-5.3 0-9.7-3.1-11.3-7.6l-6.6 5.1C9 40.4 15.9 45 24 45z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.3 5.7l6.6 5.4C41.4 36.3 45 30.8 45 24c0-1.4-.1-2.5-.4-3.5z"/></svg>
+        Lanjutkan dengan Google
+      </button>
+
+      <div class="connecting-row" id="connectingRow"><div class="spin"></div> Mengalihkan ke Google&hellip;</div>
+
+      <div class="login-foot">Dengan masuk, kamu menyetujui cara Bombon AI mengelola data akunmu.</div>
+    </div>
+  </div>
+
+  <!-- ===================== APP ===================== -->
+  <div id="app">
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <img class="brand-logo" src="/assets/logo.jpg" alt="logo">
+        <div class="brand-name display">Bombon <span>AI</span></div>
+        <button class="sidebar-close" id="sidebarClose">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="new-chat-btn" id="newChatBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Obrolan baru
+      </div>
+
+      <div class="side-label">Riwayat</div>
+      <div class="history-item active">Obrolan baru</div>
+      <div class="history-item">Analisis foto produk</div>
+      <div class="history-item">Script Python pengurutan data</div>
+      <div class="history-item">Landing page HTML sederhana</div>
+
+      <div class="sidebar-footer" id="sidebarFooter" title="Klik untuk keluar">
+        <div class="avatar-g" id="sideAvatar">A</div>
+        <div>
+          <div class="user-name" id="sideName">Andi Saputra</div>
+          <div class="user-plan" id="sideEmail">Masuk dengan Google</div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="topbar-left">
+          <button class="menu-btn" id="menuBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div class="topbar-title">Obrolan baru <span class="dot">·</span> Bombon AI</div>
+        </div>
+        <div class="model-pill">Bombon · Model Cepat</div>
+      </div>
+
+      <div class="chat-scroll" id="chatScroll">
+        <div class="chat-inner" id="chatInner"></div>
+      </div>
+
+      <div class="input-zone">
+        <div class="input-inner">
+          <div class="attach-preview" id="attachPreview">
+            <img id="attachImg" src="" alt="">
+            <span id="attachName">gambar.jpg</span>
+            <button id="attachRemove">✕</button>
+          </div>
+          <div class="input-box">
+            <button class="icon-btn" id="attachBtn" title="Lampirkan gambar">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.5l-9 9a5 5 0 01-7-7l9-9a3.5 3.5 0 015 5l-9 9a2 2 0 01-3-3l8-8"/></svg>
+            </button>
+            <input type="file" id="fileInput" accept="image/*" style="display:none">
+            <textarea id="msgInput" rows="1" placeholder="Tulis pesan ke Bombon AI..."></textarea>
+            <button class="send-btn" id="sendBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+            </button>
+          </div>
+          <div class="input-hint">Bombon AI bisa saja keliru. Periksa kembali info penting.</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+<script>
+  /* ---------- particles ---------- */
+  const field = document.getElementById('nodeField');
+  for(let i=0;i<24;i++){
+    const s = document.createElement('span');
+    s.style.left = Math.random()*100+'%';
+    s.style.top = Math.random()*100+'%';
+    s.style.animationDelay = (Math.random()*4)+'s';
+    s.style.animationDuration = (5+Math.random()*5)+'s';
+    field.appendChild(s);
+  }
+
+  /* ---------- line-draw splash sequence ---------- */
+  function animateDraw(){
+    const pB = document.getElementById('pathB');
+    const pN = document.getElementById('pathNet');
+    const dots = document.querySelectorAll('.netdot');
+
+    [pB, pN].forEach(p=>{
+      const len = p.getTotalLength();
+      p.style.strokeDasharray = len;
+      p.style.strokeDashoffset = len;
+    });
+
+    // trigger draw for B
+    requestAnimationFrame(()=>{
+      pB.style.transition = 'stroke-dashoffset 0.9s cubic-bezier(.4,0,.2,1)';
+      pB.style.strokeDashoffset = 0;
+    });
+    // draw net slightly after
+    setTimeout(()=>{
+      pN.style.transition = 'stroke-dashoffset 0.7s cubic-bezier(.4,0,.2,1)';
+      pN.style.strokeDashoffset = 0;
+    }, 350);
+    // pop dots in
+    dots.forEach((d,i)=>{
+      setTimeout(()=>{
+        d.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+        d.style.opacity = 1;
+        d.style.transform = 'scale(1.3)';
+        setTimeout(()=>{ d.style.transform='scale(1)'; }, 150);
+      }, 700 + i*70);
+    });
+
+    // reveal raster logo, fade out line drawing
+    setTimeout(()=>{
+      document.getElementById('drawWrap').classList.add('fade');
+      document.getElementById('rasterLogo').classList.add('reveal');
+      document.getElementById('splashWord').classList.add('show');
+      document.getElementById('splashTag').classList.add('show');
+    }, 1500);
+
+    // move to login screen
+    setTimeout(async ()=>{
+      document.getElementById('splash').classList.add('hide');
+      await checkExistingSession();
+      if(!document.getElementById('app').classList.contains('show')){
+        document.getElementById('login').classList.remove('hide');
+      }
+    }, 2500);
+  }
+  animateDraw();
+
+  /* ---------- Supabase client + real Google login ---------- */
+  const supabaseClient = (window.BOMBON_CONFIG && window.supabase)
+    ? window.supabase.createClient(window.BOMBON_CONFIG.SUPABASE_URL, window.BOMBON_CONFIG.SUPABASE_ANON_KEY)
+    : null;
+
+  function enterAppWithUser(user){
+    const meta = user.user_metadata || {};
+    const name = meta.full_name || meta.name || user.email || 'Pengguna';
+    const avatarUrl = meta.avatar_url || meta.picture || '';
+    const initial = name.trim().charAt(0).toUpperCase() || 'U';
+
+    document.getElementById('sideName').textContent = name;
+    document.getElementById('sideEmail').textContent = user.email || 'Masuk dengan Google';
+
+    const sideAvatar = document.getElementById('sideAvatar');
+    if(avatarUrl){
+      sideAvatar.innerHTML = `<img src="${avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+    } else {
+      sideAvatar.textContent = initial;
+    }
+    window.BOMBON_USER = { name, avatarUrl, initial, email: user.email };
+
+    document.getElementById('login').classList.add('hide');
+    document.getElementById('app').classList.add('show');
+    if(document.getElementById('chatInner').childElementCount === 0){
+      addMessage('ai', '<p>Halo! Bombon AI di sini, ada yang bisa saya bantu? 😊</p>');
+    }
+  }
+
+  document.getElementById('googleBtn').addEventListener('click', async ()=>{
+    if(!supabaseClient){
+      alert('Supabase belum dikonfigurasi. Isi SUPABASE_URL dan SUPABASE_ANON_KEY di public/config.js dulu.');
+      return;
+    }
+    document.getElementById('googleBtn').style.display='none';
+    document.getElementById('connectingRow').classList.add('show');
+    await supabaseClient.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin }
+    });
+    // Browser akan diarahkan penuh ke halaman login Google lalu kembali ke sini.
+  });
+
+  document.getElementById('sidebarFooter').addEventListener('click', async ()=>{
+    if(!supabaseClient) return;
+    if(confirm('Keluar dari Bombon AI?')){
+      await supabaseClient.auth.signOut();
+      window.location.reload();
+    }
+  });
+
+  // Kalau user sudah login (misalnya baru saja diarahkan balik dari Google), langsung masuk app
+  async function checkExistingSession(){
+    if(!supabaseClient) return;
+    const { data } = await supabaseClient.auth.getSession();
+    if(data && data.session && data.session.user){
+      enterAppWithUser(data.session.user);
+    }
+  }
+
+  /* ---------- chat logic ---------- */
+  const chatInner = document.getElementById('chatInner');
+  const chatScroll = document.getElementById('chatScroll');
+  const msgInput = document.getElementById('msgInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const fileInput = document.getElementById('fileInput');
+  const attachBtn = document.getElementById('attachBtn');
+  const attachPreview = document.getElementById('attachPreview');
+  const attachImg = document.getElementById('attachImg');
+  const attachName = document.getElementById('attachName');
+  const attachRemove = document.getElementById('attachRemove');
+
+  let pendingImage = null;
+
+  attachBtn.addEventListener('click', ()=> fileInput.click());
+  fileInput.addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      pendingImage = ev.target.result;
+      attachImg.src = pendingImage;
+      attachName.textContent = file.name;
+      attachPreview.classList.add('show');
+    };
+    reader.readAsDataURL(file);
+  });
+  attachRemove.addEventListener('click', ()=>{
+    pendingImage = null;
+    fileInput.value = '';
+    attachPreview.classList.remove('show');
+  });
+
+  msgInput.addEventListener('input', ()=>{
+    msgInput.style.height = 'auto';
+    msgInput.style.height = Math.min(msgInput.scrollHeight, 120)+'px';
+  });
+  msgInput.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter' && !e.shiftKey){
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+  sendBtn.addEventListener('click', sendMessage);
+
+  document.getElementById('newChatBtn').addEventListener('click', ()=>{
+    chatInner.innerHTML = '';
+    conversationHistory = [];
+    addMessage('ai', '<p>Halo! Bombon AI di sini, ada yang bisa saya bantu? 😊</p>');
+    closeSidebar();
+  });
+
+  /* ---------- sidebar drawer (hidden by default, like Claude) ---------- */
+  const sidebar = document.getElementById('sidebar');
+  const sidebarOverlay = document.getElementById('sidebarOverlay');
+  function openSidebar(){
+    sidebar.classList.add('open');
+    sidebarOverlay.classList.add('show');
+  }
+  function closeSidebar(){
+    sidebar.classList.remove('open');
+    sidebarOverlay.classList.remove('show');
+  }
+  document.getElementById('menuBtn').addEventListener('click', openSidebar);
+  document.getElementById('sidebarClose').addEventListener('click', closeSidebar);
+  sidebarOverlay.addEventListener('click', closeSidebar);
+  document.querySelectorAll('.history-item').forEach(item=>{
+    item.addEventListener('click', closeSidebar);
+  });
+
+  function escapeHtml(str){
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function addMessage(role, innerHtml, imgSrc){
+    const wrap = document.createElement('div');
+    wrap.className = 'msg';
+    let avatarHtml;
+    if(role === 'ai'){
+      avatarHtml = '<div class="msg-avatar ai"><img src="/assets/logo.jpg" alt=""></div>';
+    } else {
+      const u = window.BOMBON_USER;
+      const inner = (u && u.avatarUrl)
+        ? `<img src="${u.avatarUrl}" style="width:100%;height:100%;object-fit:cover;">`
+        : (u ? u.initial : 'A');
+      avatarHtml = `<div class="msg-avatar user"><div class="avatar-g" style="width:100%;height:100%;">${inner}</div></div>`;
+    }
+    const name = role === 'ai' ? 'Bombon AI' : 'Kamu';
+    const imgTag = imgSrc ? `<img class="img-chip-in-msg" src="${imgSrc}">` : '';
+    wrap.innerHTML = `${avatarHtml}<div class="msg-body"><div class="msg-name">${name}</div><div class="msg-text">${imgTag}${innerHtml}</div></div>`;
+    chatInner.appendChild(wrap);
+    chatScroll.scrollTop = chatScroll.scrollHeight;
+    wrap.querySelectorAll('pre code').forEach(el=>{ if(window.hljs) hljs.highlightElement(el); });
+    return wrap;
+  }
+
+  function addTyping(){
+    const wrap = document.createElement('div');
+    wrap.className = 'msg';
+    wrap.id = 'typingMsg';
+    wrap.innerHTML = `<div class="msg-avatar ai"><img src="/assets/logo.jpg" alt=""></div>
+      <div class="msg-body"><div class="msg-name">Bombon AI</div><div class="typing"><span></span><span></span><span></span></div></div>`;
+    chatInner.appendChild(wrap);
+    chatScroll.scrollTop = chatScroll.scrollHeight;
+  }
+  function removeTyping(){
+    const t = document.getElementById('typingMsg');
+    if(t) t.remove();
+  }
+
+  /* ---------- markdown-ish renderer for AI replies ---------- */
+  function renderMarkdown(raw){
+    const codeBlocks = [];
+    let text = raw.replace(/```(\w*)\n([\s\S]*?)```/g, (m, lang, code)=>{
+      const idx = codeBlocks.length;
+      const langLabel = (lang || 'text').toLowerCase();
+      codeBlocks.push(`<div class="code-lang">${langLabel}</div><pre><code class="language-${langLabel}">${escapeHtml(code.trim())}</code></pre>`);
+      return `%%CODEBLOCK${idx}%%`;
+    });
+
+    text = escapeHtml(text);
+    text = text.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+    text = text.split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g,'<br>')}</p>`).join('');
+
+    text = text.replace(/%%CODEBLOCK(\d+)%%/g, (m, idx) => codeBlocks[parseInt(idx)]);
+    return text;
+  }
+
+  /* ---------- conversation history sent to the API for context ---------- */
+  let conversationHistory = [];
+
+  async function callBombonAPI(message, imageDataUrl){
+    const payload = { message, history: conversationHistory };
+
+    if(imageDataUrl){
+      const [prefix, data] = imageDataUrl.split(',');
+      const mimeMatch = prefix.match(/data:(.*?);base64/);
+      payload.image = { mimeType: mimeMatch ? mimeMatch[1] : 'image/jpeg', data };
+    }
+
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      throw new Error(err.error || 'Gagal menghubungi Bombon AI.');
+    }
+    const data = await res.json();
+    return data.reply;
+  }
+
+  function sendMessage(){
+    const text = msgInput.value.trim();
+    if(!text && !pendingImage) return;
+
+    const imgToSend = pendingImage;
+    addMessage('user', text ? `<p>${escapeHtml(text)}</p>` : '', imgToSend);
+
+    msgInput.value = '';
+    msgInput.style.height = 'auto';
+    pendingImage = null;
+    fileInput.value = '';
+    attachPreview.classList.remove('show');
+
+    addTyping();
+    callBombonAPI(text, imgToSend)
+      .then(reply => {
+        removeTyping();
+        addMessage('ai', renderMarkdown(reply));
+        conversationHistory.push({ role: 'user', content: text });
+        conversationHistory.push({ role: 'assistant', content: reply });
+        if(conversationHistory.length > 24) conversationHistory = conversationHistory.slice(-24);
+      })
+      .catch(err => {
+        removeTyping();
+        addMessage('ai', `<p>Maaf, ada kendala: ${escapeHtml(err.message)}</p>`);
+      });
+  }
+</script>
+
+</body>
+</html>
