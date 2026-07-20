@@ -91,13 +91,19 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: JSON.stringify({ reply: 'Halo! Bombon AI di sini, ada yang bisa saya bantu?' }) };
   }
 
-  if (isOwner && isMemoryCommand(message)) {
+  if (isMemoryCommand(message)) {
+    if (!isOwner) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ reply: 'Command ini cuma bisa dipake sama Bombon (pemiliknya), bukan kamu 🙏' }),
+      };
+    }
     const note = message.replace(/^\/(inget|remember)\s+/i, '').trim();
     const ok = note && (await saveMemoryNote(note));
     return {
       statusCode: 200,
       body: JSON.stringify({
-        reply: ok ? `Oke, gw inget: "${note}" 👍` : 'Gagal nyimpen catatan, coba lagi ya.',
+        reply: ok ? `Oke, gw inget: "${note}" 👍` : 'Gagal nyimpen catatan (cek SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY di env), coba lagi ya.',
       }),
     };
   }

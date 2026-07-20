@@ -20,9 +20,10 @@
     --rose:#d6a189;
     --rose-bright:#e8bfa8;
     --rose-dim:#a97a68;
+    --rose-rgb:var(--rose-rgb);
     --ink:#e9edf3;
     --ink-dim:#8b94a7;
-    --line: rgba(214,161,137,0.14);
+    --line: rgba(var(--rose-rgb),0.14);
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   html,body{height:100%;}
@@ -47,7 +48,7 @@
   .node-field span{
     position:absolute; width:3px; height:3px; border-radius:50%;
     background: var(--rose);
-    box-shadow:0 0 8px 1px rgba(214,161,137,0.6);
+    box-shadow:0 0 8px 1px rgba(var(--rose-rgb),0.6);
     animation: drift 8s ease-in-out infinite;
   }
   @keyframes drift{
@@ -68,7 +69,7 @@
   .raster-logo{
     position:absolute; width:150px; height:150px; border-radius:34px;
     opacity:0; transform:scale(0.82);
-    box-shadow: 0 0 50px rgba(214,161,137,0.3), 0 25px 60px rgba(0,0,0,0.55);
+    box-shadow: 0 0 50px rgba(var(--rose-rgb),0.3), 0 25px 60px rgba(0,0,0,0.55);
     transition: opacity 0.7s ease, transform 0.7s cubic-bezier(.2,.9,.25,1.2);
   }
   .raster-logo.reveal{ opacity:1; transform:scale(1); }
@@ -95,7 +96,7 @@
     box-shadow:0 30px 80px rgba(0,0,0,0.5);
   }
   .login-logo{ width:66px; height:66px; border-radius:16px; margin:0 auto 18px; display:block;
-    box-shadow:0 10px 30px rgba(214,161,137,0.2); }
+    box-shadow:0 10px 30px rgba(var(--rose-rgb),0.2); }
   .login-title{ font-family:'Space Grotesk'; font-size:19px; font-weight:600; margin-bottom:6px; }
   .login-sub{ font-size:13px; color:var(--ink-dim); margin-bottom:28px; line-height:1.5; }
 
@@ -118,7 +119,7 @@
   .connecting-row.show{ display:flex; }
   .spin{
     width:14px; height:14px; border-radius:50%;
-    border:2px solid rgba(214,161,137,0.25); border-top-color:var(--rose-bright);
+    border:2px solid rgba(var(--rose-rgb),0.25); border-top-color:var(--rose-bright);
     animation: spin 0.7s linear infinite;
   }
   @keyframes spin{ to{ transform:rotate(360deg); } }
@@ -130,7 +131,7 @@
     padding:11px 12px; border-radius:12px; border:1px solid var(--line);
     cursor:pointer; transition:background 0.15s ease;
   }
-  .account-row:hover{ background:rgba(214,161,137,0.08); }
+  .account-row:hover{ background:rgba(var(--rose-rgb),0.08); }
   .account-avatar{
     width:34px; height:34px; border-radius:50%; flex-shrink:0;
     background:linear-gradient(135deg,#6b8cff,#4a5fd6);
@@ -160,11 +161,11 @@
   .brand-name span{ color:var(--rose-bright); }
 
   .new-chat-btn{ display:flex; align-items:center; gap:9px;
-    background: linear-gradient(135deg, rgba(214,161,137,0.14), rgba(214,161,137,0.05));
+    background: linear-gradient(135deg, rgba(var(--rose-rgb),0.14), rgba(var(--rose-rgb),0.05));
     border:1px solid var(--line); color:var(--ink); font-size:13.5px; font-weight:500;
     padding:10px 13px; border-radius:10px; cursor:pointer; margin-bottom:18px;
     transition: border-color 0.2s ease, background 0.2s ease; }
-  .new-chat-btn:hover{ border-color: var(--rose-dim); background: rgba(214,161,137,0.18); }
+  .new-chat-btn:hover{ border-color: var(--rose-dim); background: rgba(var(--rose-rgb),0.18); }
   .new-chat-btn svg{ width:15px; height:15px; stroke:var(--rose-bright); flex-shrink:0; }
 
   .side-label{ font-size:10.5px; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-dim); padding:4px 8px 8px; }
@@ -172,7 +173,7 @@
     cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     transition: background 0.15s ease, color 0.15s ease; }
   .history-item:hover{ background: rgba(255,255,255,0.04); color:var(--ink); }
-  .history-item.active{ background: rgba(214,161,137,0.1); color:var(--rose-bright); }
+  .history-item.active{ background: rgba(var(--rose-rgb),0.1); color:var(--rose-bright); }
 
   .sidebar-footer{ margin-top:auto; padding-top:14px; border-top:1px solid var(--line);
     display:flex; align-items:center; gap:10px; padding:10px 8px 4px; cursor:pointer; }
@@ -212,7 +213,7 @@
   .msg-text pre{ background:#0d1420; border:1px solid var(--line); border-radius:10px; padding:14px 16px;
     overflow-x:auto; margin:10px 0; font-size:12.5px; }
   .msg-text code{ font-family:'JetBrains Mono', monospace; }
-  .msg-text :not(pre) > code{ background:rgba(214,161,137,0.12); padding:1px 5px; border-radius:5px; font-size:12.8px; color:var(--rose-bright); }
+  .msg-text :not(pre) > code{ background:rgba(var(--rose-rgb),0.12); padding:1px 5px; border-radius:5px; font-size:12.8px; color:var(--rose-bright); }
   .code-lang{ font-size:10.5px; color:var(--ink-dim); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px; }
 
   .img-chip-in-msg{ max-width:220px; border-radius:12px; border:1px solid var(--line); margin-bottom:8px; display:block; }
@@ -249,7 +250,7 @@
   .input-hint{ text-align:center; font-size:11px; color:var(--ink-dim); margin-top:10px; }
 
   ::-webkit-scrollbar{ width:8px; }
-  ::-webkit-scrollbar-thumb{ background:rgba(214,161,137,0.18); border-radius:4px; }
+  ::-webkit-scrollbar-thumb{ background:rgba(var(--rose-rgb),0.18); border-radius:4px; }
   ::-webkit-scrollbar-track{ background:transparent; }
 
   /* ===================== NEW: topbar action buttons ===================== */
@@ -283,7 +284,7 @@
   .theme-swatch.active{ border-color:var(--ink); }
 
   /* ===================== NEW: file chip (non-image attachment) ===================== */
-  .file-chip-in-msg{ display:flex; align-items:center; gap:8px; background:rgba(214,161,137,0.1);
+  .file-chip-in-msg{ display:flex; align-items:center; gap:8px; background:rgba(var(--rose-rgb),0.1);
     border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin-bottom:8px; width:fit-content; font-size:12.5px; }
 </style>
 </head>
@@ -578,15 +579,17 @@
       const zip = await JSZip.loadAsync(buf);
       let combined = '';
       const entries = Object.values(zip.files).filter(f=>!f.dir);
+      const skipNames = /package-lock\.json$|\.min\.js$|player-script/i;
       for(const entry of entries){
         const lower = entry.name.toLowerCase();
         const isTextFile = TEXT_EXTENSIONS.some(ext=>lower.endsWith(ext));
-        if(!isTextFile) continue;
-        const content = await entry.async('string');
-        combined += `\n\n--- ${entry.name} ---\n${content}`;
-        if(combined.length > 15000) break;
+        if(!isTextFile || skipNames.test(lower)) continue;
+        const fileContent = await entry.async('string');
+        if(fileContent.length > 4000) continue; // kemungkinan file vendor/minified, skip biar gak makan jatah
+        combined += `\n\n--- ${entry.name} ---\n${fileContent}`;
+        if(combined.length > 20000) break;
       }
-      return combined || '(Zip ini gak ada file teks/kode yang bisa dibaca — cuma gambar/file biner.)';
+      return combined || '(Zip ini gak ada file teks/kode yang muat dibaca — isinya gambar/file biner/file terlalu besar.)';
     }
     // txt, md, csv, json, dan teks polos lainnya
     return await file.text();
@@ -810,17 +813,18 @@
 
   /* ---------- NEW: tema warna ---------- */
   const THEMES = {
-    rose:   { rose:'#d6a189', roseBright:'#e8bfa8', roseDim:'#a97a68' },
-    biru:   { rose:'#7ea8d6', roseBright:'#a8c8e8', roseDim:'#5a7ea9' },
-    hijau:  { rose:'#8fbf8a', roseBright:'#b3dcae', roseDim:'#5f8f5a' },
-    ungu:   { rose:'#b08ad6', roseBright:'#cdb0e8', roseDim:'#805fa9' },
+    rose:   { rose:'#d6a189', roseBright:'#e8bfa8', roseDim:'#a97a68', rgb:'214,161,137' },
+    biru:   { rose:'#7ea8d6', roseBright:'#a8c8e8', roseDim:'#5a7ea9', rgb:'126,168,214' },
+    hijau:  { rose:'#8fbf8a', roseBright:'#b3dcae', roseDim:'#5f8f5a', rgb:'143,191,138' },
+    ungu:   { rose:'#b08ad6', roseBright:'#cdb0e8', roseDim:'#805fa9', rgb:'176,138,214' },
   };
   function applyTheme(name){
     const t = THEMES[name] || THEMES.rose;
     document.documentElement.style.setProperty('--rose', t.rose);
     document.documentElement.style.setProperty('--rose-bright', t.roseBright);
     document.documentElement.style.setProperty('--rose-dim', t.roseDim);
-    document.documentElement.style.setProperty('--line', t.rose + '24');
+    document.documentElement.style.setProperty('--rose-rgb', t.rgb);
+    document.documentElement.style.setProperty('--line', `rgba(${t.rgb},0.14)`);
     localStorage.setItem('bombon_theme', name);
     document.querySelectorAll('.theme-swatch').forEach(sw=>{
       sw.classList.toggle('active', sw.dataset.theme === name);
