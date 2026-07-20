@@ -9,6 +9,9 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="/config.js"></script>
 <style>
   :root{
@@ -248,6 +251,40 @@
   ::-webkit-scrollbar{ width:8px; }
   ::-webkit-scrollbar-thumb{ background:rgba(214,161,137,0.18); border-radius:4px; }
   ::-webkit-scrollbar-track{ background:transparent; }
+
+  /* ===================== NEW: topbar action buttons ===================== */
+  .topbar-actions{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
+  .topbar-icon-btn{ width:30px; height:30px; border-radius:8px; background:none; border:none;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .topbar-icon-btn:hover{ background:rgba(255,255,255,0.06); }
+  .topbar-icon-btn svg{ width:15.5px; height:15.5px; stroke:var(--ink-dim); }
+
+  /* ===================== NEW: code block copy button ===================== */
+  .code-block-wrap{ position:relative; }
+  .code-copy-btn{ position:absolute; top:8px; right:8px; font-size:10.5px; color:var(--ink-dim);
+    background:rgba(255,255,255,0.06); border:1px solid var(--line); border-radius:6px;
+    padding:4px 8px; cursor:pointer; transition:color 0.15s ease, background 0.15s ease; }
+  .code-copy-btn:hover{ color:var(--ink); background:rgba(255,255,255,0.1); }
+  .code-copy-btn.copied{ color:var(--rose-bright); }
+
+  /* ===================== NEW: dynamic history items ===================== */
+  .history-item{ position:relative; display:flex; align-items:center; gap:6px; }
+  .history-item .history-title{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .history-item .history-actions{ display:none; gap:4px; flex-shrink:0; }
+  .history-item:hover .history-actions{ display:flex; }
+  .history-actions button{ background:none; border:none; color:var(--ink-dim); cursor:pointer; font-size:11px; padding:2px 4px; }
+  .history-actions button:hover{ color:var(--rose-bright); }
+
+  /* ===================== NEW: theme swatches ===================== */
+  .theme-row{ display:flex; gap:8px; padding:4px 8px 14px; }
+  .theme-swatch{ width:22px; height:22px; border-radius:50%; cursor:pointer; border:2px solid transparent;
+    transition: transform 0.15s ease, border-color 0.15s ease; flex-shrink:0; }
+  .theme-swatch:hover{ transform:scale(1.1); }
+  .theme-swatch.active{ border-color:var(--ink); }
+
+  /* ===================== NEW: file chip (non-image attachment) ===================== */
+  .file-chip-in-msg{ display:flex; align-items:center; gap:8px; background:rgba(214,161,137,0.1);
+    border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin-bottom:8px; width:fit-content; font-size:12.5px; }
 </style>
 </head>
 <body>
@@ -309,8 +346,11 @@
         Obrolan baru
       </div>
 
+      <div class="side-label">Tema</div>
+      <div class="theme-row" id="themeRow"></div>
+
       <div class="side-label">Riwayat</div>
-      <div class="history-item active">Obrolan baru</div>
+      <div id="historyList"></div>
 
       <div class="sidebar-footer" id="sidebarFooter" title="Klik untuk keluar">
         <div class="avatar-g" id="sideAvatar">A</div>
@@ -329,7 +369,15 @@
           </button>
           <div class="topbar-title">Obrolan baru <span class="dot">·</span> Bombon AI</div>
         </div>
-        <div class="model-pill">Bombon · Model Cepat</div>
+        <div class="topbar-actions">
+          <button class="topbar-icon-btn" id="downloadBtn" title="Unduh obrolan">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0l-4-4m4 4l4-4M4 20h16"/></svg>
+          </button>
+          <button class="topbar-icon-btn" id="shareBtn" title="Bagikan obrolan">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+          </button>
+          <div class="model-pill">Bombon · Model Cepat</div>
+        </div>
       </div>
 
       <div class="chat-scroll" id="chatScroll">
@@ -344,10 +392,10 @@
             <button id="attachRemove">✕</button>
           </div>
           <div class="input-box">
-            <button class="icon-btn" id="attachBtn" title="Lampirkan gambar">
+            <button class="icon-btn" id="attachBtn" title="Lampirkan file">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.5l-9 9a5 5 0 01-7-7l9-9a3.5 3.5 0 015 5l-9 9a2 2 0 01-3-3l8-8"/></svg>
             </button>
-            <input type="file" id="fileInput" accept="image/*" style="display:none">
+            <input type="file" id="fileInput" accept="image/*,.pdf,.txt,.md,.csv,.json,.docx,.zip" style="display:none">
             <textarea id="msgInput" rows="1" placeholder="Tulis pesan ke Bombon AI..."></textarea>
             <button class="send-btn" id="sendBtn">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
@@ -449,6 +497,7 @@
     if(document.getElementById('chatInner').childElementCount === 0){
       addMessage('ai', '<p>Halo! Bombon AI di sini, ada yang bisa saya bantu? 😊</p>');
     }
+    if(typeof renderHistoryList === 'function') renderHistoryList();
   }
 
   document.getElementById('googleBtn').addEventListener('click', async ()=>{
@@ -495,23 +544,92 @@
   const attachRemove = document.getElementById('attachRemove');
 
   let pendingImage = null;
+  let pendingFileText = null;
+  let pendingFileName = null;
 
   attachBtn.addEventListener('click', ()=> fileInput.click());
-  fileInput.addEventListener('change', (e)=>{
+
+  const TEXT_EXTENSIONS = ['.txt','.md','.csv','.json','.js','.jsx','.ts','.tsx','.py','.java','.c','.cpp','.h',
+    '.html','.htm','.css','.xml','.yml','.yaml','.php','.rb','.go','.rs','.sql','.sh','.bat','.ini','.cfg','.log'];
+
+  async function extractFileText(file){
+    const name = file.name.toLowerCase();
+    if(name.endsWith('.pdf')){
+      if(window.pdfjsLib){
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      let text = '';
+      for(let i=1;i<=pdf.numPages;i++){
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        text += content.items.map(it=>it.str).join(' ') + '\n';
+      }
+      return text;
+    }
+    if(name.endsWith('.docx')){
+      const buf = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer: buf });
+      return result.value;
+    }
+    if(name.endsWith('.zip')){
+      const buf = await file.arrayBuffer();
+      const zip = await JSZip.loadAsync(buf);
+      let combined = '';
+      const entries = Object.values(zip.files).filter(f=>!f.dir);
+      for(const entry of entries){
+        const lower = entry.name.toLowerCase();
+        const isTextFile = TEXT_EXTENSIONS.some(ext=>lower.endsWith(ext));
+        if(!isTextFile) continue;
+        const content = await entry.async('string');
+        combined += `\n\n--- ${entry.name} ---\n${content}`;
+        if(combined.length > 15000) break;
+      }
+      return combined || '(Zip ini gak ada file teks/kode yang bisa dibaca — cuma gambar/file biner.)';
+    }
+    // txt, md, csv, json, dan teks polos lainnya
+    return await file.text();
+  }
+
+  fileInput.addEventListener('change', async (e)=>{
     const file = e.target.files[0];
     if(!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev)=>{
-      pendingImage = ev.target.result;
-      attachImg.src = pendingImage;
+
+    if(file.type.startsWith('image/')){
+      pendingFileText = null; pendingFileName = null;
+      const reader = new FileReader();
+      reader.onload = (ev)=>{
+        pendingImage = ev.target.result;
+        attachImg.style.display = '';
+        attachImg.src = pendingImage;
+        attachName.textContent = file.name;
+        attachPreview.classList.add('show');
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    pendingImage = null;
+    attachName.textContent = 'Membaca ' + file.name + '...';
+    attachImg.style.display = 'none';
+    attachPreview.classList.add('show');
+    try{
+      pendingFileText = await extractFileText(file);
+      pendingFileName = file.name;
       attachName.textContent = file.name;
-      attachPreview.classList.add('show');
-    };
-    reader.readAsDataURL(file);
+    }catch(err){
+      attachPreview.classList.remove('show');
+      pendingFileText = null; pendingFileName = null;
+      alert('Gagal baca file ini: ' + err.message);
+    }
   });
   attachRemove.addEventListener('click', ()=>{
     pendingImage = null;
+    pendingFileText = null;
+    pendingFileName = null;
     fileInput.value = '';
+    attachImg.style.display = '';
     attachPreview.classList.remove('show');
   });
 
@@ -526,13 +644,6 @@
     }
   });
   sendBtn.addEventListener('click', sendMessage);
-
-  document.getElementById('newChatBtn').addEventListener('click', ()=>{
-    chatInner.innerHTML = '';
-    conversationHistory = [];
-    addMessage('ai', '<p>Halo! Bombon AI di sini, ada yang bisa saya bantu? 😊</p>');
-    closeSidebar();
-  });
 
   /* ---------- sidebar drawer (hidden by default, like Claude) ---------- */
   const sidebar = document.getElementById('sidebar');
@@ -595,10 +706,12 @@
   /* ---------- markdown-ish renderer for AI replies ---------- */
   function renderMarkdown(raw){
     const codeBlocks = [];
+    const rawCodeBlocks = [];
     let text = raw.replace(/```(\w*)\n([\s\S]*?)```/g, (m, lang, code)=>{
       const idx = codeBlocks.length;
       const langLabel = (lang || 'text').toLowerCase();
       codeBlocks.push(`<div class="code-lang">${langLabel}</div><pre><code class="language-${langLabel}">${escapeHtml(code.trim())}</code></pre>`);
+      rawCodeBlocks.push(code.trim());
       return `%%CODEBLOCK${idx}%%`;
     });
 
@@ -607,23 +720,42 @@
     text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
     text = text.split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g,'<br>')}</p>`).join('');
 
-    text = text.replace(/%%CODEBLOCK(\d+)%%/g, (m, idx) => codeBlocks[parseInt(idx)]);
+    text = text.replace(/%%CODEBLOCK(\d+)%%/g, (m, idx) => {
+      const raw = rawCodeBlocks[parseInt(idx)];
+      const encoded = encodeURIComponent(raw);
+      return `<div class="code-block-wrap"><button class="code-copy-btn" data-code="${encoded}" onclick="copyCodeBlock(this)">Salin</button>${codeBlocks[parseInt(idx)]}</div>`;
+    });
     return text;
+  }
+
+  function copyCodeBlock(btn){
+    const code = decodeURIComponent(btn.getAttribute('data-code'));
+    navigator.clipboard.writeText(code).then(()=>{
+      btn.textContent = 'Tersalin!';
+      btn.classList.add('copied');
+      setTimeout(()=>{ btn.textContent = 'Salin'; btn.classList.remove('copied'); }, 1500);
+    });
   }
 
   /* ---------- conversation history sent to the API for context ---------- */
   let conversationHistory = [];
 
-  async function callBombonAPI(message, imageDataUrl){
+  async function callBombonAPI(message, imageDataUrl, fileText, fileName){
     const payload = { message, history: conversationHistory };
+    if(window.BOMBON_USER && window.BOMBON_USER.email) payload.userEmail = window.BOMBON_USER.email;
 
     if(imageDataUrl){
       const [prefix, data] = imageDataUrl.split(',');
       const mimeMatch = prefix.match(/data:(.*?);base64/);
       payload.image = { mimeType: mimeMatch ? mimeMatch[1] : 'image/jpeg', data };
     }
+    if(fileText){
+      payload.fileText = fileText;
+      payload.fileName = fileName;
+    }
 
-    const res = await fetch('/api/chat', {
+    const apiBase = (window.BOMBON_CONFIG && window.BOMBON_CONFIG.API_BASE) || '';
+    const res = await fetch(`${apiBase}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -639,31 +771,210 @@
 
   function sendMessage(){
     const text = msgInput.value.trim();
-    if(!text && !pendingImage) return;
+    if(!text && !pendingImage && !pendingFileText) return;
 
     const imgToSend = pendingImage;
-    addMessage('user', text ? `<p>${escapeHtml(text)}</p>` : '', imgToSend);
+    const fileTextToSend = pendingFileText;
+    const fileNameToSend = pendingFileName;
+
+    let userBubble = text ? `<p>${escapeHtml(text)}</p>` : '';
+    if(fileTextToSend && !imgToSend){
+      userBubble = `<div class="file-chip-in-msg">📄 ${escapeHtml(fileNameToSend)}</div>` + userBubble;
+    }
+    addMessage('user', userBubble, imgToSend);
 
     msgInput.value = '';
     msgInput.style.height = 'auto';
     pendingImage = null;
+    pendingFileText = null;
+    pendingFileName = null;
     fileInput.value = '';
+    attachImg.style.display = '';
     attachPreview.classList.remove('show');
 
     addTyping();
-    callBombonAPI(text, imgToSend)
+    callBombonAPI(text, imgToSend, fileTextToSend, fileNameToSend)
       .then(reply => {
         removeTyping();
         addMessage('ai', renderMarkdown(reply));
         conversationHistory.push({ role: 'user', content: text });
         conversationHistory.push({ role: 'assistant', content: reply });
         if(conversationHistory.length > 24) conversationHistory = conversationHistory.slice(-24);
+        saveCurrentChat();
       })
       .catch(err => {
         removeTyping();
         addMessage('ai', `<p>Maaf, ada kendala: ${escapeHtml(err.message)}</p>`);
       });
   }
+
+  /* ---------- NEW: tema warna ---------- */
+  const THEMES = {
+    rose:   { rose:'#d6a189', roseBright:'#e8bfa8', roseDim:'#a97a68' },
+    biru:   { rose:'#7ea8d6', roseBright:'#a8c8e8', roseDim:'#5a7ea9' },
+    hijau:  { rose:'#8fbf8a', roseBright:'#b3dcae', roseDim:'#5f8f5a' },
+    ungu:   { rose:'#b08ad6', roseBright:'#cdb0e8', roseDim:'#805fa9' },
+  };
+  function applyTheme(name){
+    const t = THEMES[name] || THEMES.rose;
+    document.documentElement.style.setProperty('--rose', t.rose);
+    document.documentElement.style.setProperty('--rose-bright', t.roseBright);
+    document.documentElement.style.setProperty('--rose-dim', t.roseDim);
+    document.documentElement.style.setProperty('--line', t.rose + '24');
+    localStorage.setItem('bombon_theme', name);
+    document.querySelectorAll('.theme-swatch').forEach(sw=>{
+      sw.classList.toggle('active', sw.dataset.theme === name);
+    });
+  }
+  function renderThemeRow(){
+    const row = document.getElementById('themeRow');
+    row.innerHTML = '';
+    Object.keys(THEMES).forEach(name=>{
+      const sw = document.createElement('div');
+      sw.className = 'theme-swatch';
+      sw.dataset.theme = name;
+      sw.style.background = THEMES[name].roseBright;
+      sw.title = name;
+      sw.addEventListener('click', ()=> applyTheme(name));
+      row.appendChild(sw);
+    });
+    applyTheme(localStorage.getItem('bombon_theme') || 'rose');
+  }
+  renderThemeRow();
+
+  /* ---------- NEW: riwayat obrolan tersimpan lokal (per akun) ---------- */
+  function chatsKey(){
+    const email = (window.BOMBON_USER && window.BOMBON_USER.email) || 'guest';
+    return 'bombon_chats_' + email;
+  }
+  function loadChats(){
+    try{ return JSON.parse(localStorage.getItem(chatsKey()) || '[]'); }catch(e){ return []; }
+  }
+  function saveChats(chats){
+    localStorage.setItem(chatsKey(), JSON.stringify(chats));
+  }
+  let currentChatId = null;
+
+  function saveCurrentChat(){
+    if(chatInner.childElementCount === 0) return;
+    const chats = loadChats();
+    const firstUserMsg = conversationHistory.find(m=>m.role==='user');
+    const title = firstUserMsg ? firstUserMsg.content.slice(0,40) : 'Obrolan baru';
+    const snapshot = { html: chatInner.innerHTML, history: conversationHistory };
+    if(currentChatId){
+      const idx = chats.findIndex(c=>c.id===currentChatId);
+      if(idx>-1){ chats[idx].snapshot = snapshot; if(!chats[idx].customTitle) chats[idx].title = title; }
+    } else {
+      currentChatId = 'c' + Date.now();
+      chats.unshift({ id: currentChatId, title, customTitle:false, snapshot });
+    }
+    saveChats(chats.slice(0,30));
+    renderHistoryList();
+  }
+
+  function renderHistoryList(){
+    const list = document.getElementById('historyList');
+    const chats = loadChats();
+    list.innerHTML = '';
+
+    const newItem = document.createElement('div');
+    newItem.className = 'history-item' + (!currentChatId ? ' active' : '');
+    newItem.innerHTML = `<span class="history-title">Obrolan baru</span>`;
+    newItem.addEventListener('click', ()=> startNewChat());
+    list.appendChild(newItem);
+
+    chats.forEach(chat=>{
+      const item = document.createElement('div');
+      item.className = 'history-item' + (chat.id===currentChatId ? ' active' : '');
+      item.innerHTML = `<span class="history-title">${escapeHtml(chat.title)}</span>
+        <div class="history-actions">
+          <button title="Ganti nama" data-act="rename">✎</button>
+          <button title="Hapus" data-act="delete">🗑</button>
+        </div>`;
+      item.querySelector('.history-title').addEventListener('click', ()=>{
+        openChat(chat.id);
+      });
+      item.querySelector('[data-act="rename"]').addEventListener('click', (e)=>{
+        e.stopPropagation();
+        const newTitle = prompt('Nama obrolan:', chat.title);
+        if(newTitle && newTitle.trim()){
+          const cs = loadChats();
+          const idx = cs.findIndex(c=>c.id===chat.id);
+          if(idx>-1){ cs[idx].title = newTitle.trim(); cs[idx].customTitle = true; saveChats(cs); renderHistoryList(); }
+        }
+      });
+      item.querySelector('[data-act="delete"]').addEventListener('click', (e)=>{
+        e.stopPropagation();
+        if(confirm('Hapus obrolan ini?')){
+          const cs = loadChats().filter(c=>c.id!==chat.id);
+          saveChats(cs);
+          if(currentChatId===chat.id) startNewChat();
+          renderHistoryList();
+        }
+      });
+      list.appendChild(item);
+    });
+  }
+
+  function openChat(id){
+    const chats = loadChats();
+    const chat = chats.find(c=>c.id===id);
+    if(!chat) return;
+    currentChatId = id;
+    chatInner.innerHTML = chat.snapshot.html;
+    conversationHistory = chat.snapshot.history || [];
+    chatInner.querySelectorAll('pre code').forEach(el=>{ if(window.hljs) hljs.highlightElement(el); });
+    chatScroll.scrollTop = chatScroll.scrollHeight;
+    renderHistoryList();
+    closeSidebar();
+  }
+
+  function startNewChat(){
+    currentChatId = null;
+    chatInner.innerHTML = '';
+    conversationHistory = [];
+    addMessage('ai', '<p>Halo! Bombon AI di sini, ada yang bisa saya bantu? 😊</p>');
+    renderHistoryList();
+    closeSidebar();
+  }
+
+  document.getElementById('newChatBtn').addEventListener('click', startNewChat);
+
+  /* ---------- NEW: unduh & bagikan obrolan ---------- */
+  function transcriptText(){
+    const lines = [];
+    chatInner.querySelectorAll('.msg').forEach(msg=>{
+      const name = msg.querySelector('.msg-name')?.textContent || '';
+      const text = msg.querySelector('.msg-text')?.innerText || '';
+      lines.push(`${name}:\n${text}\n`);
+    });
+    return lines.join('\n');
+  }
+
+  document.getElementById('downloadBtn').addEventListener('click', ()=>{
+    const text = transcriptText();
+    if(!text.trim()){ alert('Belum ada obrolan buat diunduh.'); return; }
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bombon-ai-obrolan.txt';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('shareBtn').addEventListener('click', async ()=>{
+    const text = transcriptText();
+    if(!text.trim()){ alert('Belum ada obrolan buat dibagikan.'); return; }
+    if(navigator.share){
+      try{ await navigator.share({ title: 'Obrolan Bombon AI', text }); }catch(e){}
+    } else {
+      await navigator.clipboard.writeText(text);
+      alert('Obrolan disalin ke clipboard (share native gak didukung browser ini).');
+    }
+  });
 </script>
 
 </body>
