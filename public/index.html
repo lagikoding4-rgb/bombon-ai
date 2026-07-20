@@ -800,7 +800,11 @@
       .then(reply => {
         removeTyping();
         addMessage('ai', renderMarkdown(reply));
-        conversationHistory.push({ role: 'user', content: text });
+        let historyContent = text;
+        if(fileTextToSend){
+          historyContent = `${text || 'Tolong bantu analisis/jelasin isi file ini.'}\n\n[Isi file "${fileNameToSend}"]:\n${fileTextToSend.slice(0,8000)}`;
+        }
+        conversationHistory.push({ role: 'user', content: historyContent });
         conversationHistory.push({ role: 'assistant', content: reply });
         if(conversationHistory.length > 24) conversationHistory = conversationHistory.slice(-24);
         saveCurrentChat();

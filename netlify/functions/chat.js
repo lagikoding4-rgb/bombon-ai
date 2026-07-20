@@ -149,7 +149,7 @@ exports.handler = async (event) => {
 
       const messages = [
         { role: 'system', content: systemContent },
-        ...history.slice(-12),
+        ...history.slice(-8),
         { role: 'user', content: userMessage },
       ];
 
