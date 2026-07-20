@@ -262,7 +262,8 @@
 
   /* ===================== NEW: code block copy button ===================== */
   .code-block-wrap{ position:relative; }
-  .code-copy-btn{ position:absolute; top:8px; right:8px; font-size:10.5px; color:var(--ink-dim);
+  .code-block-actions{ position:absolute; top:8px; right:8px; display:flex; gap:6px; z-index:1; }
+  .code-copy-btn{ font-size:10.5px; color:var(--ink-dim);
     background:rgba(255,255,255,0.06); border:1px solid var(--line); border-radius:6px;
     padding:4px 8px; cursor:pointer; transition:color 0.15s ease, background 0.15s ease; }
   .code-copy-btn:hover{ color:var(--ink); background:rgba(255,255,255,0.1); }
@@ -710,11 +711,13 @@
   function renderMarkdown(raw){
     const codeBlocks = [];
     const rawCodeBlocks = [];
+    const rawCodeLangs = [];
     let text = raw.replace(/```(\w*)\n([\s\S]*?)```/g, (m, lang, code)=>{
       const idx = codeBlocks.length;
       const langLabel = (lang || 'text').toLowerCase();
       codeBlocks.push(`<div class="code-lang">${langLabel}</div><pre><code class="language-${langLabel}">${escapeHtml(code.trim())}</code></pre>`);
       rawCodeBlocks.push(code.trim());
+      rawCodeLangs.push(langLabel);
       return `%%CODEBLOCK${idx}%%`;
     });
 
@@ -725,10 +728,34 @@
 
     text = text.replace(/%%CODEBLOCK(\d+)%%/g, (m, idx) => {
       const raw = rawCodeBlocks[parseInt(idx)];
+      const lang = rawCodeLangs[parseInt(idx)];
       const encoded = encodeURIComponent(raw);
-      return `<div class="code-block-wrap"><button class="code-copy-btn" data-code="${encoded}" onclick="copyCodeBlock(this)">Salin</button>${codeBlocks[parseInt(idx)]}</div>`;
+      return `<div class="code-block-wrap">
+        <div class="code-block-actions">
+          <button class="code-copy-btn" data-code="${encoded}" onclick="copyCodeBlock(this)">Salin</button>
+          <button class="code-copy-btn" data-code="${encoded}" data-lang="${lang}" onclick="downloadCodeBlock(this)">Unduh</button>
+        </div>${codeBlocks[parseInt(idx)]}</div>`;
     });
     return text;
+  }
+
+  const LANG_EXT = { python:'py', javascript:'js', js:'js', java:'java', html:'html', css:'css', json:'json',
+    typescript:'ts', ts:'ts', c:'c', cpp:'cpp', csharp:'cs', php:'php', ruby:'rb', go:'go', rust:'rs',
+    sql:'sql', bash:'sh', shell:'sh', yaml:'yml', xml:'xml', text:'txt' };
+
+  function downloadCodeBlock(btn){
+    const code = decodeURIComponent(btn.getAttribute('data-code'));
+    const lang = btn.getAttribute('data-lang') || 'text';
+    const ext = LANG_EXT[lang] || 'txt';
+    const blob = new Blob([code], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bombon-code.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   }
 
   function copyCodeBlock(btn){
