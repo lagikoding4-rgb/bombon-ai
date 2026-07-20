@@ -199,6 +199,12 @@
   .chat-inner{ max-width:740px; margin:0 auto; padding:0 26px; }
 
   .msg{ display:flex; gap:14px; margin-bottom:24px; align-items:flex-start; }
+  .msg.user{ flex-direction:row-reverse; }
+  .msg.user .msg-body{ display:flex; flex-direction:column; align-items:flex-end; }
+  .msg.user .msg-name{ text-align:right; }
+  .msg.user .msg-text{ background:rgba(var(--rose-rgb),0.14); border:1px solid var(--line);
+    border-radius:16px 16px 4px 16px; padding:10px 14px; max-width:88%; display:inline-block; }
+  .msg.ai .msg-text{ max-width:100%; }
   .msg-avatar{ width:30px; height:30px; border-radius:9px; flex-shrink:0; display:flex; align-items:center; justify-content:center; overflow:hidden; }
   .msg-avatar.ai{ background: linear-gradient(135deg, #16223a, #0e1726); border:1px solid var(--line); }
   .msg-avatar.ai img{ width:100%; height:100%; border-radius:9px; }
@@ -307,6 +313,23 @@
   .attach-menu button:hover{ background:rgba(255,255,255,0.06); }
   .attach-menu svg{ width:16px; height:16px; stroke:var(--ink-dim); flex-shrink:0; }
   .attach-wrap{ position:relative; }
+
+  /* ===================== NEW: voice call ===================== */
+  .call-btn svg{ stroke:#22d3ee; }
+  .call-btn:hover{ background:rgba(34,211,238,0.12); }
+  #micBtn.active svg{ stroke:#22d3ee; }
+  #micBtn.active{ background:rgba(34,211,238,0.14); }
+
+  .call-overlay{ position:fixed; inset:0; background:#0a0f1a; display:none; flex-direction:column;
+    align-items:center; justify-content:center; gap:22px; z-index:100; }
+  .call-overlay.show{ display:flex; }
+  .call-avatar{ width:120px; height:120px; border-radius:50%; overflow:hidden; border:3px solid rgba(34,211,238,0.4);
+    box-shadow:0 0 40px rgba(34,211,238,0.25); }
+  .call-avatar img{ width:100%; height:100%; object-fit:cover; }
+  .call-status{ color:var(--ink-dim); font-size:15px; }
+  .call-end-btn{ display:flex; align-items:center; gap:10px; background:#e5484d; color:#fff; border:none;
+    border-radius:30px; padding:14px 26px; font-size:14px; cursor:pointer; margin-top:30px; }
+  .call-end-btn svg{ width:18px; height:18px; transform:rotate(135deg); }
 </style>
 </head>
 <body>
@@ -392,6 +415,9 @@
           <div class="topbar-title">Obrolan baru <span class="dot">·</span> Bombon AI</div>
         </div>
         <div class="topbar-actions">
+          <button class="topbar-icon-btn call-btn" id="callBtn" title="Telepon Bombon AI">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+          </button>
           <button class="topbar-icon-btn" id="downloadBtn" title="Unduh obrolan">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0l-4-4m4 4l4-4M4 20h16"/></svg>
           </button>
@@ -400,6 +426,15 @@
           </button>
           <div class="model-pill">Bombon · Model Cepat</div>
         </div>
+      </div>
+
+      <div class="call-overlay" id="callOverlay">
+        <div class="call-avatar"><img src="/assets/logo.jpg" alt=""></div>
+        <div class="call-status" id="callStatus">Menghubungkan...</div>
+        <button class="call-end-btn" id="callEndBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+          Akhiri panggilan
+        </button>
       </div>
 
       <div class="chat-scroll" id="chatScroll">
@@ -426,6 +461,9 @@
             </div>
             <input type="file" id="fileInput" accept="image/*,.pdf,.txt,.md,.csv,.json,.docx,.zip" style="display:none">
             <textarea id="msgInput" rows="1" placeholder="Tulis pesan ke Bombon AI..."></textarea>
+            <button class="icon-btn" id="micBtn" title="Bicara">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>
+            </button>
             <button class="send-btn" id="sendBtn">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
             </button>
@@ -727,7 +765,7 @@
 
   function addMessage(role, innerHtml, imgSrc){
     const wrap = document.createElement('div');
-    wrap.className = 'msg';
+    wrap.className = 'msg ' + (role === 'ai' ? 'ai' : 'user');
     let avatarHtml;
     if(role === 'ai'){
       avatarHtml = '<div class="msg-avatar ai"><img src="/assets/logo.jpg" alt=""></div>';
@@ -1105,6 +1143,125 @@
       await navigator.clipboard.writeText(text);
       alert('Obrolan disalin ke clipboard (share native gak didukung browser ini).');
     }
+  });
+
+  /* ---------- NEW: voice input (dikte) & mode telepon ---------- */
+  function hasNativeSpeech(){
+    return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()
+      && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition);
+  }
+
+  async function listenOnce(){
+    if(hasNativeSpeech()){
+      const SR = window.Capacitor.Plugins.SpeechRecognition;
+      const avail = await SR.available();
+      if(!avail.available) throw new Error('Voice input gak didukung perangkat ini.');
+      const perm = await SR.requestPermissions();
+      if(perm.speechRecognition !== 'granted') throw new Error('Izin mikrofon ditolak.');
+      const result = await SR.start({ language: 'id-ID', maxResults: 1, popup: false, partialResults: false });
+      return (result && result.matches && result.matches[0]) || '';
+    }
+    const SRWeb = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SRWeb) throw new Error('Browser ini belum dukung voice input.');
+    return new Promise((resolve, reject)=>{
+      const rec = new SRWeb();
+      rec.lang = 'id-ID';
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.onresult = (e)=> resolve(e.results[0][0].transcript);
+      rec.onerror = (e)=> reject(new Error(e.error || 'Voice input gagal'));
+      try{ rec.start(); }catch(err){ reject(err); }
+    });
+  }
+
+  const micBtn = document.getElementById('micBtn');
+  let micListening = false;
+  micBtn.addEventListener('click', async ()=>{
+    if(micListening) return;
+    micListening = true;
+    micBtn.classList.add('active');
+    try{
+      const text = await listenOnce();
+      if(text){
+        msgInput.value = (msgInput.value ? msgInput.value + ' ' : '') + text;
+        msgInput.style.height = 'auto';
+        msgInput.style.height = msgInput.scrollHeight + 'px';
+      }
+    }catch(err){
+      alert(err.message);
+    }
+    micListening = false;
+    micBtn.classList.remove('active');
+  });
+
+  const callBtn = document.getElementById('callBtn');
+  const callOverlay = document.getElementById('callOverlay');
+  const callStatus = document.getElementById('callStatus');
+  const callEndBtn = document.getElementById('callEndBtn');
+  let callActive = false;
+
+  function speakAndWait(text){
+    return new Promise(resolve=>{
+      if(!window.speechSynthesis){ resolve(); return; }
+      window.speechSynthesis.cancel();
+      const cleanText = text.replace(/```[\s\S]*?```/g, ' saya sudah tulis kodenya di layar. ');
+      const utter = new SpeechSynthesisUtterance(cleanText);
+      utter.lang = 'id-ID';
+      utter.onend = resolve;
+      utter.onerror = resolve;
+      window.speechSynthesis.speak(utter);
+    });
+  }
+
+  async function callLoop(){
+    while(callActive){
+      callStatus.textContent = 'Mendengarkan...';
+      let text;
+      try{
+        text = await listenOnce();
+      }catch(err){
+        if(!callActive) break;
+        callStatus.textContent = err.message;
+        await new Promise(r=>setTimeout(r, 1800));
+        continue;
+      }
+      if(!callActive) break;
+      if(!text || !text.trim()) continue;
+
+      addMessage('user', `<p>${escapeHtml(text)}</p>`);
+      callStatus.textContent = 'Bombon AI mikir...';
+      let reply;
+      try{
+        reply = await callBombonAPI(text, null, null, null);
+      }catch(err){
+        reply = 'Maaf, ada kendala nyambungin ke server.';
+      }
+      if(!callActive) break;
+      addMessage('ai', renderMarkdown(reply));
+      conversationHistory.push({ role:'user', content:text });
+      conversationHistory.push({ role:'assistant', content:reply });
+      if(conversationHistory.length > 24) conversationHistory = conversationHistory.slice(-24);
+      saveCurrentChat();
+
+      callStatus.textContent = 'Bombon AI ngomong...';
+      await speakAndWait(reply);
+    }
+  }
+
+  callBtn.addEventListener('click', ()=>{
+    if(!(window.SpeechRecognition || window.webkitSpeechRecognition || hasNativeSpeech())){
+      alert('Perangkat/browser ini belum dukung voice input buat mode telepon.');
+      return;
+    }
+    callActive = true;
+    callOverlay.classList.add('show');
+    callLoop();
+  });
+  callEndBtn.addEventListener('click', ()=>{
+    callActive = false;
+    window.speechSynthesis?.cancel();
+    callOverlay.classList.remove('show');
+    callStatus.textContent = 'Menghubungkan...';
   });
 </script>
 
