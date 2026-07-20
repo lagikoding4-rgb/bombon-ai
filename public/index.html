@@ -287,6 +287,26 @@
   /* ===================== NEW: file chip (non-image attachment) ===================== */
   .file-chip-in-msg{ display:flex; align-items:center; gap:8px; background:rgba(var(--rose-rgb),0.1);
     border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin-bottom:8px; width:fit-content; font-size:12.5px; }
+
+  /* ===================== NEW: message action row ===================== */
+  .msg-actions{ display:flex; gap:4px; margin-top:8px; }
+  .msg-action-btn{ width:28px; height:28px; border-radius:8px; background:none; border:none;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .msg-action-btn svg{ width:15px; height:15px; stroke:var(--ink-dim); }
+  .msg-action-btn:hover{ background:rgba(255,255,255,0.06); }
+  .msg-action-btn:hover svg{ stroke:var(--ink); }
+  .msg-action-btn.active svg{ stroke:var(--rose-bright); fill:rgba(var(--rose-rgb),0.18); }
+
+  /* ===================== NEW: attach menu popup ===================== */
+  .attach-menu{ position:absolute; bottom:52px; left:0; background:#141b2c; border:1px solid var(--line);
+    border-radius:12px; padding:6px; display:none; flex-direction:column; gap:2px; min-width:150px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.4); z-index:20; }
+  .attach-menu.show{ display:flex; }
+  .attach-menu button{ display:flex; align-items:center; gap:10px; background:none; border:none;
+    color:var(--ink); font-size:13px; padding:9px 10px; border-radius:8px; cursor:pointer; text-align:left; }
+  .attach-menu button:hover{ background:rgba(255,255,255,0.06); }
+  .attach-menu svg{ width:16px; height:16px; stroke:var(--ink-dim); flex-shrink:0; }
+  .attach-wrap{ position:relative; }
 </style>
 </head>
 <body>
@@ -394,9 +414,16 @@
             <button id="attachRemove">✕</button>
           </div>
           <div class="input-box">
-            <button class="icon-btn" id="attachBtn" title="Lampirkan file">
-              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.5l-9 9a5 5 0 01-7-7l9-9a3.5 3.5 0 015 5l-9 9a2 2 0 01-3-3l8-8"/></svg>
-            </button>
+            <div class="attach-wrap">
+              <button class="icon-btn" id="attachBtn" title="Lampirkan file">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              <div class="attach-menu" id="attachMenu">
+                <button id="attachCameraOpt"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>Kamera</button>
+                <button id="attachPhotoOpt"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>Foto</button>
+                <button id="attachFileOpt"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.5l-9 9a5 5 0 01-7-7l9-9a3.5 3.5 0 015 5l-9 9a2 2 0 01-3-3l8-8"/></svg>File</button>
+              </div>
+            </div>
             <input type="file" id="fileInput" accept="image/*,.pdf,.txt,.md,.csv,.json,.docx,.zip" style="display:none">
             <textarea id="msgInput" rows="1" placeholder="Tulis pesan ke Bombon AI..."></textarea>
             <button class="send-btn" id="sendBtn">
@@ -549,7 +576,34 @@
   let pendingFileText = null;
   let pendingFileName = null;
 
-  attachBtn.addEventListener('click', ()=> fileInput.click());
+  const attachMenu = document.getElementById('attachMenu');
+
+  attachBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    attachMenu.classList.toggle('show');
+  });
+  document.addEventListener('click', (e)=>{
+    if(!attachMenu.contains(e.target) && e.target !== attachBtn) attachMenu.classList.remove('show');
+  });
+
+  document.getElementById('attachCameraOpt').addEventListener('click', ()=>{
+    attachMenu.classList.remove('show');
+    fileInput.setAttribute('accept', 'image/*');
+    fileInput.setAttribute('capture', 'environment');
+    fileInput.click();
+  });
+  document.getElementById('attachPhotoOpt').addEventListener('click', ()=>{
+    attachMenu.classList.remove('show');
+    fileInput.removeAttribute('capture');
+    fileInput.setAttribute('accept', 'image/*');
+    fileInput.click();
+  });
+  document.getElementById('attachFileOpt').addEventListener('click', ()=>{
+    attachMenu.classList.remove('show');
+    fileInput.removeAttribute('capture');
+    fileInput.setAttribute('accept', 'image/*,.pdf,.txt,.md,.csv,.json,.docx,.zip');
+    fileInput.click();
+  });
 
   const TEXT_EXTENSIONS = ['.txt','.md','.csv','.json','.js','.jsx','.ts','.tsx','.py','.java','.c','.cpp','.h',
     '.html','.htm','.css','.xml','.yml','.yaml','.php','.rb','.go','.rs','.sql','.sh','.bat','.ini','.cfg','.log'];
@@ -686,11 +740,53 @@
     }
     const name = role === 'ai' ? 'Bombon AI' : 'Kamu';
     const imgTag = imgSrc ? `<img class="img-chip-in-msg" src="${imgSrc}">` : '';
-    wrap.innerHTML = `${avatarHtml}<div class="msg-body"><div class="msg-name">${name}</div><div class="msg-text">${imgTag}${innerHtml}</div></div>`;
+    const actionRow = role === 'ai' ? `
+      <div class="msg-actions">
+        <button class="msg-action-btn" data-act="copy" title="Salin"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/></svg></button>
+        <button class="msg-action-btn" data-act="like" title="Suka"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v11H4a1 1 0 01-1-1v-9a1 1 0 011-1h3zm0 0l4.5-8a1.5 1.5 0 012.7 1.3L13 8h6.3a2 2 0 011.9 2.6l-2.4 8A2 2 0 0116.9 20H7"/></svg></button>
+        <button class="msg-action-btn" data-act="dislike" title="Kurang suka"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V3h3a1 1 0 011 1v9a1 1 0 01-1 1h-3zm0 0l-4.5 8a1.5 1.5 0 01-2.7-1.3L11 16H4.7a2 2 0 01-1.9-2.6l2.4-8A2 2 0 017.1 4H17"/></svg></button>
+        <button class="msg-action-btn" data-act="speak" title="Dengarkan"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13"/></svg></button>
+        <button class="msg-action-btn" data-act="share" title="Bagikan"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button>
+      </div>` : '';
+    wrap.innerHTML = `${avatarHtml}<div class="msg-body"><div class="msg-name">${name}</div><div class="msg-text">${imgTag}${innerHtml}</div>${actionRow}</div>`;
     chatInner.appendChild(wrap);
     chatScroll.scrollTop = chatScroll.scrollHeight;
     wrap.querySelectorAll('pre code').forEach(el=>{ if(window.hljs) hljs.highlightElement(el); });
+    if(role === 'ai'){
+      wrap.querySelectorAll('.msg-action-btn').forEach(btn=>{
+        btn.addEventListener('click', ()=> handleMsgAction(btn, wrap));
+      });
+    }
     return wrap;
+  }
+
+  function handleMsgAction(btn, wrap){
+    const act = btn.getAttribute('data-act');
+    const text = wrap.querySelector('.msg-text').innerText;
+    if(act === 'copy'){
+      navigator.clipboard.writeText(text).then(()=>{
+        btn.classList.add('active');
+        setTimeout(()=> btn.classList.remove('active'), 1200);
+      });
+    } else if(act === 'like' || act === 'dislike'){
+      const other = act === 'like' ? 'dislike' : 'like';
+      const otherBtn = wrap.querySelector(`[data-act="${other}"]`);
+      if(otherBtn) otherBtn.classList.remove('active');
+      btn.classList.toggle('active');
+    } else if(act === 'speak'){
+      if(!window.speechSynthesis) { alert('Perangkat ini gak dukung text-to-speech.'); return; }
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'id-ID';
+      window.speechSynthesis.speak(utter);
+    } else if(act === 'share'){
+      if(navigator.share){
+        navigator.share({ title: 'Bombon AI', text }).catch(()=>{});
+      } else {
+        navigator.clipboard.writeText(text);
+        alert('Disalin ke clipboard (share native gak didukung browser ini).');
+      }
+    }
   }
 
   function addTyping(){
@@ -712,7 +808,7 @@
     const codeBlocks = [];
     const rawCodeBlocks = [];
     const rawCodeLangs = [];
-    let text = raw.replace(/```(\w*)\n([\s\S]*?)```/g, (m, lang, code)=>{
+    let text = raw.replace(/```(\w*)\n([\s\S]*?)(?:```|$)/g, (m, lang, code)=>{
       const idx = codeBlocks.length;
       const langLabel = (lang || 'text').toLowerCase();
       codeBlocks.push(`<div class="code-lang">${langLabel}</div><pre><code class="language-${langLabel}">${escapeHtml(code.trim())}</code></pre>`);

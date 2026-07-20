@@ -160,7 +160,7 @@ exports.handler = async (event) => {
           model: CHAT_MODEL,
           messages,
           temperature: 0.8,
-          max_tokens: 1200,
+          max_tokens: 6000,
         },
         { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, timeout: 30000 }
       );
