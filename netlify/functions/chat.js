@@ -5,17 +5,29 @@
 // Returns: { reply: string }
 //
 // Env vars (Netlify dashboard -> Environment variables):
-//   GROQ_API_KEY              -> wajib
+//   GROQ_API_KEY              -> wajib (provider utama)
 //   GROQ_CHAT_MODEL           -> optional
 //   GROQ_VISION_MODEL         -> optional
-//   SUPABASE_URL              -> buat fitur memory (opsional, kalau gak diisi fitur /inget dimatiin)
+//   CEREBRAS_API_KEY          -> opsional, fallback 1
+//   OPENROUTER_API_KEY        -> opsional, fallback 2
+//   GEMINI_API_KEY            -> opsional, fallback 3
+//   HUGGINGFACE_API_KEY       -> opsional, fallback 4 (terakhir)
+//   SUPABASE_URL              -> buat fitur memory (opsional)
 //   SUPABASE_SERVICE_ROLE_KEY -> service role key Supabase (JANGAN dipakai di frontend, cuma di sini)
 //   OWNER_EMAIL               -> email akun Bombon (pemilik), buat pengenalan pemilik
+//
+// Kalau Groq lagi limit/gagal, otomatis coba provider berikutnya secara berurutan
+// (Cerebras -> OpenRouter -> Gemini -> Hugging Face), tanpa user perlu tau ada masalah.
 
 const axios = require('axios');
 
 const CHAT_MODEL = process.env.GROQ_CHAT_MODEL || 'llama-3.3-70b-versatile';
 const VISION_MODEL = process.env.GROQ_VISION_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct';
+const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'llama-3.3-70b';
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const HUGGINGFACE_MODEL = process.env.HUGGINGFACE_MODEL || 'mistralai/Mistral-7B-Instruct-v0.2';
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const OWNER_EMAIL = (process.env.OWNER_EMAIL || '').toLowerCase();
@@ -65,6 +77,120 @@ async function saveMemoryNote(note) {
   }
 }
 
+// ---------- Provider callers (semua format dinormalisasi jadi string balasan) ----------
+
+async function callOpenAICompatible(baseUrl, apiKey, model, messages, maxTokens) {
+  const response = await axios.post(
+    baseUrl,
+    { model, messages, temperature: 0.8, max_tokens: maxTokens },
+    { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, timeout: 25000 }
+  );
+  const reply = response.data?.choices?.[0]?.message?.content?.trim();
+  if (!reply) throw new Error('Respon kosong');
+  return reply;
+}
+
+async function callGemini(apiKey, model, systemContent, messages) {
+  const contents = messages.map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const response = await axios.post(
+    url,
+    { contents, systemInstruction: { parts: [{ text: systemContent }] } },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 25000 }
+  );
+  const reply = response.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  if (!reply) throw new Error('Respon kosong');
+  return reply;
+}
+
+async function callHuggingFace(apiKey, model, systemContent, messages) {
+  const promptText =
+    systemContent +
+    '\n\n' +
+    messages.map((m) => `${m.role === 'assistant' ? 'AI' : 'User'}: ${m.content}`).join('\n') +
+    '\nAI:';
+  const url = `https://api-inference.huggingface.co/models/${model}`;
+  const response = await axios.post(
+    url,
+    { inputs: promptText, parameters: { max_new_tokens: 600, return_full_text: false } },
+    { headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }, timeout: 25000 }
+  );
+  const data = response.data;
+  let reply;
+  if (Array.isArray(data) && data[0]?.generated_text) reply = data[0].generated_text.trim();
+  else if (data?.generated_text) reply = data.generated_text.trim();
+  if (!reply) throw new Error('Respon kosong');
+  return reply;
+}
+
+async function getChatReply(systemContent, messages) {
+  const errors = [];
+
+  if (process.env.GROQ_API_KEY) {
+    try {
+      return await callOpenAICompatible(
+        'https://api.groq.com/openai/v1/chat/completions',
+        process.env.GROQ_API_KEY,
+        CHAT_MODEL,
+        [{ role: 'system', content: systemContent }, ...messages],
+        1200
+      );
+    } catch (e) {
+      errors.push('Groq: ' + (e.response?.status || e.message));
+    }
+  }
+
+  if (process.env.CEREBRAS_API_KEY) {
+    try {
+      return await callOpenAICompatible(
+        'https://api.cerebras.ai/v1/chat/completions',
+        process.env.CEREBRAS_API_KEY,
+        CEREBRAS_MODEL,
+        [{ role: 'system', content: systemContent }, ...messages],
+        1200
+      );
+    } catch (e) {
+      errors.push('Cerebras: ' + (e.response?.status || e.message));
+    }
+  }
+
+  if (process.env.OPENROUTER_API_KEY) {
+    try {
+      return await callOpenAICompatible(
+        'https://openrouter.ai/api/v1/chat/completions',
+        process.env.OPENROUTER_API_KEY,
+        OPENROUTER_MODEL,
+        [{ role: 'system', content: systemContent }, ...messages],
+        1200
+      );
+    } catch (e) {
+      errors.push('OpenRouter: ' + (e.response?.status || e.message));
+    }
+  }
+
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      return await callGemini(process.env.GEMINI_API_KEY, GEMINI_MODEL, systemContent, messages);
+    } catch (e) {
+      errors.push('Gemini: ' + (e.response?.status || e.message));
+    }
+  }
+
+  if (process.env.HUGGINGFACE_API_KEY) {
+    try {
+      return await callHuggingFace(process.env.HUGGINGFACE_API_KEY, HUGGINGFACE_MODEL, systemContent, messages);
+    } catch (e) {
+      errors.push('HuggingFace: ' + (e.response?.status || e.message));
+    }
+  }
+
+  console.error('Semua provider gagal:', errors.join(' | '));
+  throw new Error('Semua provider AI lagi gak bisa diakses, coba lagi sebentar lagi.');
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' };
@@ -78,15 +204,7 @@ exports.handler = async (event) => {
   }
 
   const { message = '', history = [], image, fileText, fileName, userEmail } = body;
-  const apiKey = process.env.GROQ_API_KEY;
   const isOwner = !!(userEmail && OWNER_EMAIL && userEmail.toLowerCase() === OWNER_EMAIL);
-
-  if (!apiKey) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'GROQ_API_KEY belum diatur di environment variables Netlify.' }),
-    };
-  }
 
   if (!image && isGreeting(message)) {
     return { statusCode: 200, body: JSON.stringify({ reply: 'Halo! Bombon AI di sini, ada yang bisa saya bantu?' }) };
@@ -113,25 +231,23 @@ exports.handler = async (event) => {
     let reply;
 
     if (image && image.data) {
+      if (!process.env.GROQ_API_KEY) {
+        return { statusCode: 500, body: JSON.stringify({ error: 'GROQ_API_KEY belum diatur, fitur analisis gambar butuh Groq.' }) };
+      }
       const content = [
         { type: 'text', text: message || 'Analisis gambar ini dan jelaskan isinya secara ringkas.' },
         { type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.data}` } },
       ];
-
-      const response = await axios.post(
+      reply = await callOpenAICompatible(
         'https://api.groq.com/openai/v1/chat/completions',
-        {
-          model: VISION_MODEL,
-          messages: [
-            { role: 'system', content: 'Kamu adalah Bombon AI, dibuat oleh Bombon. Analisis gambar yang dikirim pengguna secara akurat dan ringkas, dalam Bahasa Indonesia, gaya santai gak kaku.' },
-            { role: 'user', content },
-          ],
-          max_tokens: 700,
-        },
-        { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, timeout: 45000 }
+        process.env.GROQ_API_KEY,
+        VISION_MODEL,
+        [
+          { role: 'system', content: 'Kamu adalah Bombon AI, dibuat oleh Bombon. Analisis gambar yang dikirim pengguna secara akurat dan ringkas, dalam Bahasa Indonesia, gaya santai gak kaku.' },
+          { role: 'user', content },
+        ],
+        700
       );
-
-      reply = response.data?.choices?.[0]?.message?.content?.trim();
     } else {
       const memoryNotes = await fetchMemoryNotes();
       let systemContent = BASE_PERSONA;
@@ -148,24 +264,8 @@ exports.handler = async (event) => {
         userMessage = `${message || 'Tolong bantu analisis/jelasin isi file ini.'}\n\n[Isi file "${fileName || 'terlampir'}"]:\n${trimmed}`;
       }
 
-      const messages = [
-        { role: 'system', content: systemContent },
-        ...history.slice(-8),
-        { role: 'user', content: userMessage },
-      ];
-
-      const response = await axios.post(
-        'https://api.groq.com/openai/v1/chat/completions',
-        {
-          model: CHAT_MODEL,
-          messages,
-          temperature: 0.8,
-          max_tokens: 6000,
-        },
-        { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, timeout: 30000 }
-      );
-
-      reply = response.data?.choices?.[0]?.message?.content?.trim();
+      const messages = [...history.slice(-8), { role: 'user', content: userMessage }];
+      reply = await getChatReply(systemContent, messages);
     }
 
     if (!reply) {
@@ -174,10 +274,10 @@ exports.handler = async (event) => {
 
     return { statusCode: 200, body: JSON.stringify({ reply }) };
   } catch (err) {
-    console.error('Groq error:', err.response?.status, err.response?.data || err.message);
+    console.error('Chat error:', err.response?.status, err.response?.data || err.message);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Gagal menghubungi AI. Coba lagi sebentar lagi.' }),
+      body: JSON.stringify({ error: err.message || 'Gagal menghubungi AI. Coba lagi sebentar lagi.' }),
     };
   }
 };
