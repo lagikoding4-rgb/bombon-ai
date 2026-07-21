@@ -155,6 +155,32 @@ async function callGeminiVision(apiKey, model, systemContent, message, image) {
   return reply;
 }
 
+async function callGeminiImageGen(apiKey, prompt) {
+  const model = 'gemini-2.0-flash-preview-image-generation';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const response = await axios.post(
+    url,
+    {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+    },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 40000 }
+  );
+  const parts = response.data?.candidates?.[0]?.content?.parts || [];
+  const imgPart = parts.find((p) => p.inlineData || p.inline_data);
+  const textPart = parts.find((p) => p.text);
+  const inline = imgPart?.inlineData || imgPart?.inline_data;
+  if (!inline) throw new Error('Gemini gak ngasih gambar');
+  return {
+    caption: textPart?.text?.trim() || '',
+    image: { mimeType: inline.mimeType || inline.mime_type, data: inline.data },
+  };
+}
+
+function isImageGenCommand(text) {
+  return /^\/(gambar|image)\s+/i.test((text || '').trim());
+}
+
 async function getChatReply(systemContent, messages) {
   const errors = [];
 
@@ -254,6 +280,26 @@ exports.handler = async (event) => {
         reply: ok ? `Oke, gw inget: "${note}" 👍` : 'Gagal nyimpen catatan (cek SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY di env), coba lagi ya.',
       }),
     };
+  }
+
+  if (isImageGenCommand(message)) {
+    if (!process.env.GEMINI_API_KEY) {
+      return { statusCode: 200, body: JSON.stringify({ reply: 'Fitur bikin gambar belum aktif (GEMINI_API_KEY belum diatur).' }) };
+    }
+    const prompt = message.replace(/^\/(gambar|image)\s+/i, '').trim();
+    try {
+      const result = await callGeminiImageGen(process.env.GEMINI_API_KEY, prompt);
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          reply: result.caption || `Nih gambar "${prompt}" buat kamu 🎨`,
+          image: result.image,
+        }),
+      };
+    } catch (e) {
+      console.error('Image gen error:', e.response?.data || e.message);
+      return { statusCode: 200, body: JSON.stringify({ reply: 'Gagal bikin gambar, coba lagi ya: ' + e.message }) };
+    }
   }
 
   try {

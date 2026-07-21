@@ -315,6 +315,16 @@
   .attach-menu svg{ width:16px; height:16px; stroke:var(--ink-dim); flex-shrink:0; }
   .attach-wrap{ position:relative; }
 
+  /* ===================== NEW: slash command menu ===================== */
+  .slash-menu{ display:none; flex-direction:column; gap:2px; background:#141b2c; border:1px solid var(--line);
+    border-radius:12px; padding:6px; margin-bottom:8px; box-shadow:0 10px 30px rgba(0,0,0,0.4); }
+  .slash-menu.show{ display:flex; }
+  .slash-menu button{ display:flex; flex-direction:column; align-items:flex-start; gap:2px; background:none;
+    border:none; color:var(--ink); padding:9px 12px; border-radius:8px; cursor:pointer; text-align:left; }
+  .slash-menu button:hover, .slash-menu button.highlight{ background:rgba(255,255,255,0.06); }
+  .slash-menu .cmd-name{ font-size:13px; font-weight:600; color:var(--rose-bright); }
+  .slash-menu .cmd-desc{ font-size:11.5px; color:var(--ink-dim); }
+
   /* ===================== NEW: voice call ===================== */
   .call-btn svg{ stroke:#22d3ee; }
   .call-btn:hover{ background:rgba(34,211,238,0.12); }
@@ -453,6 +463,7 @@
 
       <div class="input-zone">
         <div class="input-inner">
+          <div class="slash-menu" id="slashMenu"></div>
           <div class="attach-preview" id="attachPreview">
             <img id="attachImg" src="" alt="">
             <span id="attachName">gambar.jpg</span>
@@ -958,10 +969,46 @@
       throw new Error(err.error || 'Gagal menghubungi Bombon AI.');
     }
     const data = await res.json();
-    return data.reply;
+    return { reply: data.reply, image: data.image };
   }
 
+  /* ---------- NEW: menu slash command ---------- */
+  const SLASH_COMMANDS = [
+    { cmd: '/gambar', desc: 'Bikin gambar dari deskripsi teks' },
+    { cmd: '/inget', desc: 'Simpan catatan permanen (khusus Bombon)' },
+  ];
+  const slashMenu = document.getElementById('slashMenu');
+
+  function renderSlashMenu(filterText){
+    const matches = SLASH_COMMANDS.filter(c => c.cmd.startsWith(filterText.toLowerCase()));
+    if(!matches.length){ slashMenu.classList.remove('show'); return; }
+    slashMenu.innerHTML = matches.map(c =>
+      `<button data-cmd="${c.cmd}"><span class="cmd-name">${c.cmd}</span><span class="cmd-desc">${c.desc}</span></button>`
+    ).join('');
+    slashMenu.querySelectorAll('button').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        msgInput.value = btn.dataset.cmd + ' ';
+        slashMenu.classList.remove('show');
+        msgInput.focus();
+      });
+    });
+    slashMenu.classList.add('show');
+  }
+
+  msgInput.addEventListener('input', ()=>{
+    const val = msgInput.value;
+    if(val.startsWith('/') && !val.includes(' ')){
+      renderSlashMenu(val);
+    } else {
+      slashMenu.classList.remove('show');
+    }
+  });
+  document.addEventListener('click', (e)=>{
+    if(!slashMenu.contains(e.target) && e.target !== msgInput) slashMenu.classList.remove('show');
+  });
+
   function sendMessage(){
+    slashMenu.classList.remove('show');
     const text = msgInput.value.trim();
     if(!text && !pendingImage && !pendingFileText) return;
 
@@ -986,9 +1033,10 @@
 
     addTyping();
     callBombonAPI(text, imgToSend, fileTextToSend, fileNameToSend)
-      .then(reply => {
+      .then(({ reply, image }) => {
         removeTyping();
-        addMessage('ai', renderMarkdown(reply));
+        const genImgTag = image ? `<img class="img-chip-in-msg" src="data:${image.mimeType};base64,${image.data}">` : '';
+        addMessage('ai', genImgTag + renderMarkdown(reply));
         let historyContent = text;
         if(fileTextToSend){
           historyContent = `${text || 'Tolong bantu analisis/jelasin isi file ini.'}\n\n[Isi file "${fileNameToSend}"]:\n${fileTextToSend.slice(0,8000)}`;
