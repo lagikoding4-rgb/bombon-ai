@@ -22,15 +22,16 @@
 const axios = require('axios');
 
 const CHAT_MODEL = process.env.GROQ_CHAT_MODEL || 'llama-3.3-70b-versatile';
-const VISION_MODEL = process.env.GROQ_VISION_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct';
+const VISION_MODEL = process.env.GROQ_VISION_MODEL || 'qwen/qwen3.6-27b';
 const VISION_MODEL_CANDIDATES = [
   VISION_MODEL,
+  'meta-llama/llama-4-scout-17b-16e-instruct',
   'meta-llama/llama-4-maverick-17b-128e-instruct',
   'llama-3.2-90b-vision-preview',
-  'llama-3.2-11b-vision-preview',
 ];
 const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'llama-3.3-70b';
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+const OPENROUTER_ONLINE_MODEL = process.env.OPENROUTER_ONLINE_MODEL || 'meta-llama/llama-3.1-8b-instruct';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 const HUGGINGFACE_MODEL = process.env.HUGGINGFACE_MODEL || 'mistralai/Mistral-7B-Instruct-v0.2';
 
@@ -155,30 +156,129 @@ async function callGeminiVision(apiKey, model, systemContent, message, image) {
   return reply;
 }
 
-async function callGeminiImageGen(apiKey, prompt) {
-  const model = 'gemini-2.0-flash-preview-image-generation';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  const response = await axios.post(
-    url,
-    {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-    },
-    { headers: { 'Content-Type': 'application/json' }, timeout: 40000 }
+async function searchWebSerpApi(query) {
+  const apiKey = process.env.SERPAPI_KEY;
+  if (!apiKey) throw new Error('SERPAPI_KEY belum diatur.');
+  const url = `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(query)}&api_key=${apiKey}`;
+  const response = await axios.get(url, { timeout: 15000 });
+  const data = response.data || {};
+  const snippets = [];
+  if (data.answer_box) {
+    const ab = data.answer_box;
+    const text = ab.answer || ab.snippet || ab.result || null;
+    if (text) snippets.push(text);
+  }
+  if (data.knowledge_graph) {
+    const kg = data.knowledge_graph;
+    const parts = [];
+    if (kg.title) parts.push(kg.title);
+    if (kg.description) parts.push(kg.description);
+    if (kg.type) parts.push(`Jabatan/Tipe: ${kg.type}`);
+    if (parts.length) snippets.push(parts.join(' | '));
+  }
+  const organic = data.organic_results || [];
+  for (const item of organic.slice(0, 5)) {
+    if (item.snippet) snippets.push(`${item.title ? item.title + ': ' : ''}${item.snippet}`);
+  }
+  return snippets.join('\n');
+}
+
+async function callOpenRouterOnline(systemContent, userContent) {
+  const model = `${OPENROUTER_ONLINE_MODEL}:online`;
+  return callOpenAICompatible(
+    'https://openrouter.ai/api/v1/chat/completions',
+    process.env.OPENROUTER_API_KEY,
+    model,
+    [
+      { role: 'system', content: systemContent },
+      { role: 'user', content: userContent },
+    ],
+    900
   );
-  const parts = response.data?.candidates?.[0]?.content?.parts || [];
-  const imgPart = parts.find((p) => p.inlineData || p.inline_data);
-  const textPart = parts.find((p) => p.text);
-  const inline = imgPart?.inlineData || imgPart?.inline_data;
-  if (!inline) throw new Error('Gemini gak ngasih gambar');
-  return {
-    caption: textPart?.text?.trim() || '',
-    image: { mimeType: inline.mimeType || inline.mime_type, data: inline.data },
-  };
+}
+
+async function synthesizeVisionAnswerOnline(userQuestion, identification) {
+  const systemPrompt = `Kamu asisten yang menjawab pertanyaan tentang gambar dengan AKURAT dan berdasarkan FAKTA TERKINI dari internet.
+ATURAN:
+- Fokus jawaban HARUS ke gambar yang baru dikirim, JANGAN mengaitkan atau mencampur dengan topik obrolan sebelumnya.
+- Cari & pakai info terbaru dari web buat mastiin jawabanmu akurat (misal status/jabatan terkini suatu tokoh).
+- Kalau gak nemu info relevan, jujur aja bilang gak nemu, jangan mengarang.
+- Jawab singkat, jelas, langsung ke pertanyaan, gaya santai kayak chat biasa (gw-lu).`;
+  const userPrompt = `Hasil identifikasi visual gambar yang baru dikirim user: "${identification}"\n\nPertanyaan user: "${userQuestion}"\n\nCari info terbaru soal ini di internet kalau perlu, terus jawab pertanyaan user.`;
+  return callOpenRouterOnline(systemPrompt, userPrompt);
+}
+
+async function synthesizeVisionAnswer(userQuestion, identification, searchResults) {
+  const systemPrompt = `Kamu asisten yang menjawab pertanyaan tentang gambar dengan AKURAT dan berdasarkan FAKTA TERKINI.
+Kamu akan diberi: (1) hasil identifikasi visual dari gambar, (2) hasil pencarian web terbaru terkait.
+ATURAN:
+- Jawab HANYA berdasarkan data yang diberikan, jangan mengarang atau menebak.
+- Fokus jawaban HARUS ke gambar yang baru dikirim, JANGAN mengaitkan atau mencampur dengan topik obrolan sebelumnya.
+- Kalau data pencarian menyebutkan status/jabatan/fakta terkini yang berbeda dari asumsi umum, PRIORITASKAN data pencarian.
+- Kalau data pencarian tidak cukup atau tidak relevan, katakan dengan jujur bahwa informasi tidak ditemukan, jangan mengarang.
+- Jawab singkat, jelas, langsung ke pertanyaan user, gaya santai kayak chat biasa (gw-lu).`;
+  const userPrompt = `Pertanyaan user: "${userQuestion}"\n\nHasil identifikasi visual gambar:\n${identification}\n\nHasil pencarian web terbaru:\n${searchResults || '(tidak ada hasil relevan)'}\n\nJawab pertanyaan user berdasarkan data di atas.`;
+  return getChatReply(systemPrompt, [{ role: 'user', content: userPrompt }]);
+}
+
+async function generateImagePollinations(prompt) {
+  const model = process.env.POLLINATIONS_MODEL || 'flux';
+  const width = process.env.POLLINATIONS_WIDTH || 1024;
+  const height = process.env.POLLINATIONS_HEIGHT || 1024;
+  const seed = Math.floor(Math.random() * 1000000);
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?model=${model}&width=${width}&height=${height}&seed=${seed}&nologo=true`;
+  const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 60000 });
+  const base64 = Buffer.from(response.data).toString('base64');
+  return { mimeType: 'image/jpeg', data: base64 };
+}
+
+async function searchImageSerpApi(query) {
+  const apiKey = process.env.SERPAPI_KEY;
+  if (!apiKey) throw new Error('SERPAPI_KEY belum diatur.');
+  const url = `https://serpapi.com/search.json?engine=google_images&q=${encodeURIComponent(query)}&api_key=${apiKey}`;
+  const response = await axios.get(url, { timeout: 15000 });
+  const items = response.data?.images_results || [];
+  return items.slice(0, 5).map((item) => item.original).filter(Boolean);
 }
 
 function isImageGenCommand(text) {
-  return /^\/(gambar|image)\s+/i.test((text || '').trim());
+  const t = (text || '').trim();
+  if (/^\/(gambar|image)\s+/i.test(t)) return true;
+  const hasCreateVerb = /\b(buatkan|buatin|bikinkan|bikin|gambarkan|gambarin|generate|create|lukiskan)\b/i.test(t);
+  const hasImageWord = /\b(gambar|image|foto|lukisan|ilustrasi|wallpaper)\b/i.test(t);
+  return hasCreateVerb && hasImageWord;
+}
+
+function extractImageGenPrompt(text) {
+  const t = text.trim();
+  const slash = t.match(/^\/(gambar|image)\s+(.+)/i);
+  if (slash) return slash[2].trim();
+  return t
+    .replace(/\b(tolong|coba|dong|ya)\b/gi, '')
+    .replace(/\b(buatkan|buatin|bikinkan|bikin|gambarkan|gambarin|generate|create|lukiskan)\b/gi, '')
+    .replace(/\b(gambar|image|foto|lukisan|ilustrasi|wallpaper)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim() || t;
+}
+
+function isImageSearchCommand(text) {
+  const t = (text || '').trim();
+  if (/^\/(cari|carigambar)\s+/i.test(t)) return true;
+  const hasSearchVerb = /\b(cari|carikan|cariin|search)\b/i.test(t);
+  const hasImageWord = /\b(gambar|image|foto)\b/i.test(t);
+  return hasSearchVerb && hasImageWord;
+}
+
+function extractImageSearchQuery(text) {
+  const t = text.trim();
+  const slash = t.match(/^\/(cari|carigambar)\s+(.+)/i);
+  if (slash) return slash[2].trim();
+  return t
+    .replace(/\b(tolong|coba|dong|ya)\b/gi, '')
+    .replace(/\b(cari|carikan|cariin|search)\b/gi, '')
+    .replace(/\b(gambar|image|foto)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim() || t;
 }
 
 async function getChatReply(systemContent, messages) {
@@ -282,23 +382,35 @@ exports.handler = async (event) => {
     };
   }
 
-  if (isImageGenCommand(message)) {
-    if (!process.env.GEMINI_API_KEY) {
-      return { statusCode: 200, body: JSON.stringify({ reply: 'Fitur bikin gambar belum aktif (GEMINI_API_KEY belum diatur).' }) };
-    }
-    const prompt = message.replace(/^\/(gambar|image)\s+/i, '').trim();
+  if (!image && isImageGenCommand(message)) {
+    const prompt = extractImageGenPrompt(message);
     try {
-      const result = await callGeminiImageGen(process.env.GEMINI_API_KEY, prompt);
+      const img = await generateImagePollinations(prompt);
       return {
         statusCode: 200,
-        body: JSON.stringify({
-          reply: result.caption || `Nih gambar "${prompt}" buat kamu 🎨`,
-          image: result.image,
-        }),
+        body: JSON.stringify({ reply: `Nih gambar "${prompt}" buat kamu 🎨`, image: img }),
       };
     } catch (e) {
-      console.error('Image gen error:', e.response?.data || e.message);
-      return { statusCode: 200, body: JSON.stringify({ reply: 'Gagal bikin gambar, coba lagi ya: ' + e.message }) };
+      console.error('Image gen error:', e.response?.status, e.message);
+      return { statusCode: 200, body: JSON.stringify({ reply: 'Gagal bikin gambar, coba lagi ya.' }) };
+    }
+  }
+
+  if (!image && isImageSearchCommand(message)) {
+    const query = extractImageSearchQuery(message);
+    if (!process.env.SERPAPI_KEY) {
+      return { statusCode: 200, body: JSON.stringify({ reply: 'Fitur cari gambar belum aktif (SERPAPI_KEY belum diatur).' }) };
+    }
+    try {
+      const urls = await searchImageSerpApi(query);
+      if (!urls.length) {
+        return { statusCode: 200, body: JSON.stringify({ reply: `Gak nemu hasil buat "${query}".` }) };
+      }
+      const linksMd = urls.map((u, i) => `${i + 1}. ${u}`).join('\n');
+      return { statusCode: 200, body: JSON.stringify({ reply: `Hasil pencarian "${query}":\n${linksMd}` }) };
+    } catch (e) {
+      console.error('Image search error:', e.response?.status, e.message);
+      return { statusCode: 200, body: JSON.stringify({ reply: 'Gagal nyari gambar, coba lagi ya.' }) };
     }
   }
 
@@ -310,23 +422,21 @@ exports.handler = async (event) => {
         return { statusCode: 500, body: JSON.stringify({ error: 'Belum ada provider yang bisa analisis gambar (GROQ_API_KEY atau GEMINI_API_KEY).' }) };
       }
       const content = [
-        { type: 'text', text: message || 'Analisis gambar ini dan jelaskan isinya secara ringkas.' },
+        { type: 'text', text: 'PENTING: Abaikan topik atau percakapan sebelumnya sama sekali. Fokus HANYA pada gambar yang baru saja dikirim di pesan ini. Identifikasi secara singkat dan spesifik apa/siapa yang ada di gambar ini. Kalau ini tokoh publik, sejarah, tokoh terkenal, sebutkan nama lengkapnya dan konteksnya. Kalau ini objek/benda biasa, jelaskan singkat. Jangan menambahkan opini atau info status terkini, cukup identifikasi visualnya saja berdasarkan apa yang benar-benar terlihat di gambar.' },
         { type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.data}` } },
       ];
-      const visionMessages = [
-        { role: 'system', content: 'Kamu adalah Bombon AI, dibuat oleh Bombon. Analisis gambar yang dikirim pengguna secara akurat dan ringkas, dalam Bahasa Indonesia, gaya santai gak kaku.' },
-        { role: 'user', content },
-      ];
+      const visionMessages = [{ role: 'user', content }];
       const visionErrors = [];
+      let identification;
       if (process.env.GROQ_API_KEY) {
         for (const model of VISION_MODEL_CANDIDATES) {
           try {
-            reply = await callOpenAICompatible(
+            identification = await callOpenAICompatible(
               'https://api.groq.com/openai/v1/chat/completions',
               process.env.GROQ_API_KEY,
               model,
               visionMessages,
-              700
+              500
             );
             break;
           } catch (e) {
@@ -334,12 +444,12 @@ exports.handler = async (event) => {
           }
         }
       }
-      if (!reply && process.env.GEMINI_API_KEY) {
+      if (!identification && process.env.GEMINI_API_KEY) {
         try {
-          reply = await callGeminiVision(
+          identification = await callGeminiVision(
             process.env.GEMINI_API_KEY,
             GEMINI_MODEL,
-            'Kamu adalah Bombon AI, dibuat oleh Bombon. Analisis gambar yang dikirim pengguna secara akurat dan ringkas, dalam Bahasa Indonesia, gaya santai gak kaku.',
+            'Identifikasi gambar ini secara singkat dan spesifik.',
             message,
             image
           );
@@ -347,9 +457,33 @@ exports.handler = async (event) => {
           visionErrors.push(`Gemini: ${e.response?.status || e.message}`);
         }
       }
-      if (!reply) {
+      if (!identification) {
         console.error('Semua model vision gagal:', visionErrors.join(' | '));
         throw new Error('Semua model penganalisis gambar lagi gak bisa diakses, coba lagi sebentar lagi.');
+      }
+
+      const userQuestion = message || 'Analisis isi gambar ini, jelaskan ringkasannya.';
+      if (process.env.SERPAPI_KEY) {
+        let searchResults = '';
+        try {
+          searchResults = await searchWebSerpApi(`${identification} ${userQuestion}`);
+        } catch (e) {
+          console.error('Web search fact-check gagal:', e.message);
+        }
+        try {
+          reply = await synthesizeVisionAnswer(userQuestion, identification, searchResults);
+        } catch (e) {
+          reply = identification;
+        }
+      } else if (process.env.OPENROUTER_API_KEY) {
+        try {
+          reply = await synthesizeVisionAnswerOnline(userQuestion, identification);
+        } catch (e) {
+          console.error('OpenRouter online fact-check gagal:', e.message);
+          reply = identification;
+        }
+      } else {
+        reply = identification;
       }
     } else {
       const memoryNotes = await fetchMemoryNotes();
