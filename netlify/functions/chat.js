@@ -23,6 +23,12 @@ const axios = require('axios');
 
 const CHAT_MODEL = process.env.GROQ_CHAT_MODEL || 'llama-3.3-70b-versatile';
 const VISION_MODEL = process.env.GROQ_VISION_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct';
+const VISION_MODEL_CANDIDATES = [
+  VISION_MODEL,
+  'meta-llama/llama-4-maverick-17b-128e-instruct',
+  'llama-3.2-90b-vision-preview',
+  'llama-3.2-11b-vision-preview',
+];
 const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'llama-3.3-70b';
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
@@ -238,16 +244,29 @@ exports.handler = async (event) => {
         { type: 'text', text: message || 'Analisis gambar ini dan jelaskan isinya secara ringkas.' },
         { type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.data}` } },
       ];
-      reply = await callOpenAICompatible(
-        'https://api.groq.com/openai/v1/chat/completions',
-        process.env.GROQ_API_KEY,
-        VISION_MODEL,
-        [
-          { role: 'system', content: 'Kamu adalah Bombon AI, dibuat oleh Bombon. Analisis gambar yang dikirim pengguna secara akurat dan ringkas, dalam Bahasa Indonesia, gaya santai gak kaku.' },
-          { role: 'user', content },
-        ],
-        700
-      );
+      const visionMessages = [
+        { role: 'system', content: 'Kamu adalah Bombon AI, dibuat oleh Bombon. Analisis gambar yang dikirim pengguna secara akurat dan ringkas, dalam Bahasa Indonesia, gaya santai gak kaku.' },
+        { role: 'user', content },
+      ];
+      const visionErrors = [];
+      for (const model of VISION_MODEL_CANDIDATES) {
+        try {
+          reply = await callOpenAICompatible(
+            'https://api.groq.com/openai/v1/chat/completions',
+            process.env.GROQ_API_KEY,
+            model,
+            visionMessages,
+            700
+          );
+          break;
+        } catch (e) {
+          visionErrors.push(`${model}: ${e.response?.status || e.message}`);
+        }
+      }
+      if (!reply) {
+        console.error('Semua model vision gagal:', visionErrors.join(' | '));
+        throw new Error('Semua model penganalisis gambar lagi gak bisa diakses, coba lagi sebentar lagi.');
+      }
     } else {
       const memoryNotes = await fetchMemoryNotes();
       let systemContent = BASE_PERSONA;

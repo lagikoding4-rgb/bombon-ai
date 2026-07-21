@@ -844,11 +844,7 @@
       if(otherBtn) otherBtn.classList.remove('active');
       btn.classList.toggle('active');
     } else if(act === 'speak'){
-      if(!window.speechSynthesis) { alert('Perangkat ini gak dukung text-to-speech.'); return; }
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = 'id-ID';
-      window.speechSynthesis.speak(utter);
+      speakText(text).catch(err => alert(err.message));
     } else if(act === 'share'){
       if(navigator.share){
         navigator.share({ title: 'Bombon AI', text }).catch(()=>{});
@@ -1178,6 +1174,35 @@
   });
 
   /* ---------- NEW: voice input (dikte) & mode telepon ---------- */
+  function hasNativeTTS(){
+    return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()
+      && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech);
+  }
+
+  async function speakText(text){
+    if(hasNativeTTS()){
+      await window.Capacitor.Plugins.TextToSpeech.speak({ text, lang: 'id-ID', rate: 1.0, pitch: 1.0, volume: 1.0 });
+      return;
+    }
+    if(!window.speechSynthesis) throw new Error('Perangkat ini gak dukung text-to-speech.');
+    return new Promise(resolve=>{
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'id-ID';
+      utter.onend = resolve;
+      utter.onerror = resolve;
+      window.speechSynthesis.speak(utter);
+    });
+  }
+
+  function stopSpeaking(){
+    if(hasNativeTTS()){
+      window.Capacitor.Plugins.TextToSpeech.stop().catch(()=>{});
+      return;
+    }
+    window.speechSynthesis?.cancel();
+  }
+
   function hasNativeSpeech(){
     return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()
       && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition);
@@ -1190,8 +1215,11 @@
       if(!avail.available) throw new Error('Voice input gak didukung perangkat ini.');
       const perm = await SR.requestPermissions();
       if(perm.speechRecognition !== 'granted') throw new Error('Izin mikrofon ditolak.');
-      const result = await SR.start({ language: 'id-ID', maxResults: 1, popup: false, partialResults: false });
-      return (result && result.matches && result.matches[0]) || '';
+      const startPromise = SR.start({ language: 'id-ID', maxResults: 1, popup: false, partialResults: false })
+        .then(result => (result && result.matches && result.matches[0]) || '')
+        .catch(()=> '');
+      const timeoutPromise = new Promise(resolve => setTimeout(()=> resolve(''), 9000));
+      return Promise.race([startPromise, timeoutPromise]);
     }
     const SRWeb = window.SpeechRecognition || window.webkitSpeechRecognition;
     if(!SRWeb) throw new Error('Browser ini belum dukung voice input.');
@@ -1200,9 +1228,24 @@
       rec.lang = 'id-ID';
       rec.continuous = false;
       rec.interimResults = false;
-      rec.onresult = (e)=> resolve(e.results[0][0].transcript);
-      rec.onerror = (e)=> reject(new Error(e.error || 'Voice input gagal'));
-      try{ rec.start(); }catch(err){ reject(err); }
+      let done = false;
+      const finish = (fn, val)=>{
+        if(done) return;
+        done = true;
+        clearTimeout(timeoutId);
+        fn(val);
+      };
+      const timeoutId = setTimeout(()=>{
+        try{ rec.stop(); }catch(e){}
+        finish(resolve, '');
+      }, 8000);
+      rec.onresult = (e)=> finish(resolve, e.results[0][0].transcript);
+      rec.onerror = (e)=>{
+        if(e.error === 'no-speech' || e.error === 'aborted'){ finish(resolve, ''); return; }
+        finish(reject, new Error(e.error || 'Voice input gagal'));
+      };
+      rec.onend = ()=> finish(resolve, '');
+      try{ rec.start(); }catch(err){ finish(reject, err); }
     });
   }
 
@@ -1232,6 +1275,7 @@
   const callEndBtn = document.getElementById('callEndBtn');
   const callAvatar = document.getElementById('callAvatar');
   let callActive = false;
+  let callInterrupted = false;
 
   function setCallState(state){
     callAvatar.classList.remove('listening', 'speaking');
@@ -1239,17 +1283,16 @@
     if(state === 'speaking') callAvatar.classList.add('speaking');
   }
 
+  callAvatar.addEventListener('click', ()=>{
+    if(callAvatar.classList.contains('speaking')){
+      callInterrupted = true;
+      stopSpeaking();
+    }
+  });
+
   function speakAndWait(text){
-    return new Promise(resolve=>{
-      if(!window.speechSynthesis){ resolve(); return; }
-      window.speechSynthesis.cancel();
-      const cleanText = text.replace(/```[\s\S]*?```/g, ' saya sudah tulis kodenya di layar. ');
-      const utter = new SpeechSynthesisUtterance(cleanText);
-      utter.lang = 'id-ID';
-      utter.onend = resolve;
-      utter.onerror = resolve;
-      window.speechSynthesis.speak(utter);
-    });
+    const cleanText = text.replace(/```[\s\S]*?```/g, ' saya sudah tulis kodenya di layar. ');
+    return speakText(cleanText).catch(()=>{});
   }
 
   async function callLoop(){
@@ -1301,7 +1344,7 @@
   });
   callEndBtn.addEventListener('click', ()=>{
     callActive = false;
-    window.speechSynthesis?.cancel();
+    stopSpeaking();
     callOverlay.classList.remove('show');
     setCallState('');
     callStatus.textContent = 'Menghubungkan...';
