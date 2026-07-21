@@ -264,8 +264,8 @@ function extractImageGenPrompt(text) {
 function isImageSearchCommand(text) {
   const t = (text || '').trim();
   if (/^\/(cari|carigambar)\s+/i.test(t)) return true;
-  const hasSearchVerb = /\b(cari|carikan|cariin|search)\b/i.test(t);
-  const hasImageWord = /\b(gambar|image|foto)\b/i.test(t);
+  const hasSearchVerb = /\b(cari|carikan|cariin|search|kirim|kirimkan|kirimin|kasih|kasihkan|tunjukin|tunjukkan|liatin|lihatkan|share)\b/i.test(t);
+  const hasImageWord = /\b(gambar|image|foto|picture|pic)\b/i.test(t);
   return hasSearchVerb && hasImageWord;
 }
 
@@ -275,8 +275,8 @@ function extractImageSearchQuery(text) {
   if (slash) return slash[2].trim();
   return t
     .replace(/\b(tolong|coba|dong|ya)\b/gi, '')
-    .replace(/\b(cari|carikan|cariin|search)\b/gi, '')
-    .replace(/\b(gambar|image|foto)\b/gi, '')
+    .replace(/\b(cari|carikan|cariin|search|kirim|kirimkan|kirimin|kasih|kasihkan|tunjukin|tunjukkan|liatin|lihatkan|share)\b/gi, '')
+    .replace(/\b(gambar|image|foto|picture|pic)\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim() || t;
 }
@@ -406,8 +406,24 @@ exports.handler = async (event) => {
       if (!urls.length) {
         return { statusCode: 200, body: JSON.stringify({ reply: `Gak nemu hasil buat "${query}".` }) };
       }
+      for (const imgUrl of urls) {
+        try {
+          const imgResp = await axios.get(imgUrl, { responseType: 'arraybuffer', timeout: 10000 });
+          const mimeType = imgResp.headers['content-type'] || 'image/jpeg';
+          const base64 = Buffer.from(imgResp.data).toString('base64');
+          return {
+            statusCode: 200,
+            body: JSON.stringify({
+              reply: `Nih hasil pencarian "${query}" 📸`,
+              image: { mimeType, data: base64 },
+            }),
+          };
+        } catch (e) {
+          continue; // coba url berikutnya kalau gagal fetch
+        }
+      }
       const linksMd = urls.map((u, i) => `${i + 1}. ${u}`).join('\n');
-      return { statusCode: 200, body: JSON.stringify({ reply: `Hasil pencarian "${query}":\n${linksMd}` }) };
+      return { statusCode: 200, body: JSON.stringify({ reply: `Gak bisa nampilin gambarnya langsung, ini link-nya:\n${linksMd}` }) };
     } catch (e) {
       console.error('Image search error:', e.response?.status, e.message);
       return { statusCode: 200, body: JSON.stringify({ reply: 'Gagal nyari gambar, coba lagi ya.' }) };
