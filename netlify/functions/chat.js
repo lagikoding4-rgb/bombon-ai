@@ -132,6 +132,29 @@ async function callHuggingFace(apiKey, model, systemContent, messages) {
   return reply;
 }
 
+async function callGeminiVision(apiKey, model, systemContent, message, image) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const response = await axios.post(
+    url,
+    {
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: message || 'Analisis gambar ini dan jelaskan isinya secara ringkas.' },
+            { inline_data: { mime_type: image.mimeType, data: image.data } },
+          ],
+        },
+      ],
+      systemInstruction: { parts: [{ text: systemContent }] },
+    },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 25000 }
+  );
+  const reply = response.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  if (!reply) throw new Error('Respon kosong');
+  return reply;
+}
+
 async function getChatReply(systemContent, messages) {
   const errors = [];
 
@@ -237,8 +260,8 @@ exports.handler = async (event) => {
     let reply;
 
     if (image && image.data) {
-      if (!process.env.GROQ_API_KEY) {
-        return { statusCode: 500, body: JSON.stringify({ error: 'GROQ_API_KEY belum diatur, fitur analisis gambar butuh Groq.' }) };
+      if (!process.env.GROQ_API_KEY && !process.env.GEMINI_API_KEY) {
+        return { statusCode: 500, body: JSON.stringify({ error: 'Belum ada provider yang bisa analisis gambar (GROQ_API_KEY atau GEMINI_API_KEY).' }) };
       }
       const content = [
         { type: 'text', text: message || 'Analisis gambar ini dan jelaskan isinya secara ringkas.' },
@@ -249,18 +272,33 @@ exports.handler = async (event) => {
         { role: 'user', content },
       ];
       const visionErrors = [];
-      for (const model of VISION_MODEL_CANDIDATES) {
+      if (process.env.GROQ_API_KEY) {
+        for (const model of VISION_MODEL_CANDIDATES) {
+          try {
+            reply = await callOpenAICompatible(
+              'https://api.groq.com/openai/v1/chat/completions',
+              process.env.GROQ_API_KEY,
+              model,
+              visionMessages,
+              700
+            );
+            break;
+          } catch (e) {
+            visionErrors.push(`${model}: ${e.response?.status || e.message}`);
+          }
+        }
+      }
+      if (!reply && process.env.GEMINI_API_KEY) {
         try {
-          reply = await callOpenAICompatible(
-            'https://api.groq.com/openai/v1/chat/completions',
-            process.env.GROQ_API_KEY,
-            model,
-            visionMessages,
-            700
+          reply = await callGeminiVision(
+            process.env.GEMINI_API_KEY,
+            GEMINI_MODEL,
+            'Kamu adalah Bombon AI, dibuat oleh Bombon. Analisis gambar yang dikirim pengguna secara akurat dan ringkas, dalam Bahasa Indonesia, gaya santai gak kaku.',
+            message,
+            image
           );
-          break;
         } catch (e) {
-          visionErrors.push(`${model}: ${e.response?.status || e.message}`);
+          visionErrors.push(`Gemini: ${e.response?.status || e.message}`);
         }
       }
       if (!reply) {
