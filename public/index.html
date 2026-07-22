@@ -332,24 +332,50 @@
   #micBtn.active{ background:rgba(34,211,238,0.14); }
 
   .call-overlay{ position:fixed; inset:0; background:#050810; display:none; flex-direction:column;
-    z-index:100; }
+    z-index:100; transition:all 0.25s ease; }
   .call-overlay.show{ display:flex; }
   .call-topbar{ display:flex; align-items:center; justify-content:space-between; padding:20px 22px; }
   .call-live-pill{ font-size:12px; font-weight:600; letter-spacing:0.5px; color:var(--ink);
     border:1px solid var(--line); border-radius:20px; padding:6px 16px; }
-  .call-center{ flex:1; display:flex; align-items:center; justify-content:center; }
+  .call-min-btn{ width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,0.06); border:none;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .call-min-btn svg{ width:16px; height:16px; stroke:var(--ink); }
+  .call-center{ flex:1; display:flex; align-items:center; justify-content:center; touch-action:none; }
   .call-avatar{ width:180px; height:180px; border-radius:50%; overflow:hidden;
-    box-shadow:0 0 60px rgba(34,211,238,0.35); transition:box-shadow 0.3s ease; }
+    box-shadow:0 0 60px rgba(34,211,238,0.35); transition:box-shadow 0.3s ease; cursor:grab; }
   .call-avatar.speaking{ box-shadow:0 0 90px rgba(34,211,238,0.6); }
   .call-avatar.listening{ box-shadow:0 0 90px rgba(214,161,137,0.55); }
-  .call-avatar img{ width:100%; height:100%; object-fit:cover; }
+  .call-avatar img{ width:100%; height:100%; object-fit:cover; pointer-events:none; }
   .call-status{ color:var(--ink-dim); font-size:13.5px; text-align:center; padding-bottom:18px; }
   .call-bottombar{ display:flex; align-items:center; justify-content:center; gap:26px; padding:26px 22px 40px; }
   .call-end-btn{ display:flex; align-items:center; justify-content:center; width:60px; height:60px;
     background:#e5484d; color:#fff; border:none; border-radius:50%; cursor:pointer; }
   .call-end-btn svg{ width:22px; height:22px; transform:rotate(135deg); }
+
+  /* ===================== NEW: mode telepon minimized ===================== */
+  .call-mini{ display:none; }
+  .call-overlay.minimized{ inset:auto; left:12px; right:12px; bottom:84px; height:60px; border-radius:18px;
+    background:#141b2c; border:1px solid var(--line); box-shadow:0 10px 30px rgba(0,0,0,0.4); z-index:60; }
+  .call-overlay.minimized .call-topbar,
+  .call-overlay.minimized .call-center,
+  .call-overlay.minimized .call-status,
+  .call-overlay.minimized .call-bottombar{ display:none; }
+  .call-overlay.minimized .call-mini{ display:flex; align-items:center; gap:10px; width:100%; height:100%; padding:0 12px; }
+  .call-mini-avatar{ width:38px; height:38px; border-radius:50%; overflow:hidden; flex-shrink:0; cursor:pointer;
+    box-shadow:0 0 14px rgba(34,211,238,0.4); }
+  .call-mini-avatar img{ width:100%; height:100%; object-fit:cover; }
+  .call-mini-status{ flex:1; font-size:12px; color:var(--ink-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+  .call-mini-btn{ width:34px; height:34px; border-radius:50%; border:none; cursor:pointer; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; }
+  .call-mini-mute{ background:rgba(255,255,255,0.08); }
+  .call-mini-mute svg{ width:16px; height:16px; stroke:var(--ink); }
+  .call-mini-mute.muted{ background:rgba(229,72,77,0.18); }
+  .call-mini-mute.muted svg{ stroke:#e5484d; }
+  .call-mini-end{ background:#e5484d; }
+  .call-mini-end svg{ width:15px; height:15px; stroke:#fff; transform:rotate(135deg); }
 </style>
 </head>
+
 <body>
 
   <!-- ===================== SPLASH ===================== -->
@@ -447,11 +473,26 @@
       </div>
 
       <div class="call-overlay" id="callOverlay">
-        <div class="call-topbar"><div class="call-live-pill">Live</div><div style="width:32px"></div></div>
+        <div class="call-topbar">
+          <div class="call-live-pill">Live</div>
+          <button class="call-min-btn" id="callMinBtn" title="Minimize">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+        </div>
         <div class="call-center"><div class="call-avatar" id="callAvatar"><img src="/assets/logo.jpg" alt=""></div></div>
         <div class="call-status" id="callStatus">Menghubungkan...</div>
         <div class="call-bottombar">
           <button class="call-end-btn" id="callEndBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+          </button>
+        </div>
+        <div class="call-mini" id="callMini">
+          <div class="call-mini-avatar" id="callMiniAvatar"><img src="/assets/logo.jpg" alt=""></div>
+          <div class="call-mini-status" id="callMiniStatus">Mendengarkan...</div>
+          <button class="call-mini-btn call-mini-mute" id="callMuteBtn" title="Bisukan mic">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8"/></svg>
+          </button>
+          <button class="call-mini-btn call-mini-end" id="callMiniEndBtn" title="Tutup telepon">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
           </button>
         </div>
@@ -969,7 +1010,7 @@
       throw new Error(err.error || 'Gagal menghubungi Bombon AI.');
     }
     const data = await res.json();
-    return { reply: data.reply, image: data.image };
+    return { reply: data.reply, image: data.image, identification: data.identification };
   }
 
   /* ---------- NEW: menu slash command ---------- */
@@ -1033,7 +1074,7 @@
 
     addTyping();
     callBombonAPI(text, imgToSend, fileTextToSend, fileNameToSend)
-      .then(({ reply, image }) => {
+      .then(({ reply, image, identification }) => {
         removeTyping();
         const genImgTag = image ? `<img class="img-chip-in-msg" src="data:${image.mimeType};base64,${image.data}">` : '';
         addMessage('ai', genImgTag + renderMarkdown(reply));
@@ -1042,7 +1083,8 @@
           historyContent = `${text || 'Tolong bantu analisis/jelasin isi file ini.'}\n\n[Isi file "${fileNameToSend}"]:\n${fileTextToSend.slice(0,8000)}`;
         }
         conversationHistory.push({ role: 'user', content: historyContent });
-        conversationHistory.push({ role: 'assistant', content: reply });
+        const assistantContent = identification ? `${reply}\n\n[Transkrip lengkap isi gambar tadi:]\n${identification}` : reply;
+        conversationHistory.push({ role: 'assistant', content: assistantContent });
         if(conversationHistory.length > 24) conversationHistory = conversationHistory.slice(-24);
         saveCurrentChat();
       })
@@ -1322,14 +1364,60 @@
   const callStatus = document.getElementById('callStatus');
   const callEndBtn = document.getElementById('callEndBtn');
   const callAvatar = document.getElementById('callAvatar');
+  const callMinBtn = document.getElementById('callMinBtn');
+  const callMini = document.getElementById('callMini');
+  const callMiniAvatar = document.getElementById('callMiniAvatar');
+  const callMiniStatus = document.getElementById('callMiniStatus');
+  const callMuteBtn = document.getElementById('callMuteBtn');
+  const callMiniEndBtn = document.getElementById('callMiniEndBtn');
   let callActive = false;
   let callInterrupted = false;
+  let callMuted = false;
 
   function setCallState(state){
     callAvatar.classList.remove('listening', 'speaking');
     if(state === 'listening') callAvatar.classList.add('listening');
     if(state === 'speaking') callAvatar.classList.add('speaking');
   }
+
+  function setCallStatusText(text){
+    callStatus.textContent = text;
+    callMiniStatus.textContent = text;
+  }
+
+  function minimizeCall(){
+    callOverlay.classList.add('minimized');
+  }
+  function expandCall(){
+    callOverlay.classList.remove('minimized');
+  }
+
+  callMinBtn.addEventListener('click', minimizeCall);
+  callMiniAvatar.addEventListener('click', expandCall);
+  callMiniStatus.addEventListener('click', expandCall);
+
+  callMuteBtn.addEventListener('click', ()=>{
+    callMuted = !callMuted;
+    callMuteBtn.classList.toggle('muted', callMuted);
+    if(callMuted){
+      callInterrupted = true;
+      stopSpeaking();
+    }
+  });
+
+  callMiniEndBtn.addEventListener('click', ()=> callEndBtn.click());
+
+  let dragStartY = null;
+  callAvatar.addEventListener('touchstart', (e)=>{ dragStartY = e.touches[0].clientY; }, { passive:true });
+  callAvatar.addEventListener('touchmove', (e)=>{
+    if(dragStartY === null) return;
+    const dy = e.touches[0].clientY - dragStartY;
+    if(dy > 80){
+      minimizeCall();
+      dragStartY = null;
+    }
+  }, { passive:true });
+  callAvatar.addEventListener('touchend', ()=>{ dragStartY = null; });
 
   callAvatar.addEventListener('click', ()=>{
     if(callAvatar.classList.contains('speaking')){
@@ -1345,26 +1433,33 @@
 
   async function callLoop(){
     while(callActive){
+      if(callMuted){
+        setCallState('');
+        setCallStatusText('Mic dibisukan');
+        await new Promise(r=>setTimeout(r, 600));
+        continue;
+      }
       setCallState('listening');
-      callStatus.textContent = 'Mendengarkan...';
+      setCallStatusText('Mendengarkan...');
       let text;
       try{
         text = await listenOnce();
       }catch(err){
         if(!callActive) break;
-        callStatus.textContent = err.message;
+        setCallStatusText(err.message);
         await new Promise(r=>setTimeout(r, 1800));
         continue;
       }
-      if(!callActive) break;
+      if(!callActive || callMuted) continue;
       if(!text || !text.trim()) continue;
 
       addMessage('user', `<p>${escapeHtml(text)}</p>`);
       setCallState('');
-      callStatus.textContent = 'Bombon AI mikir...';
+      setCallStatusText('Bombon AI mikir...');
       let reply;
       try{
-        reply = await callBombonAPI(text, null, null, null);
+        const result = await callBombonAPI(text, null, null, null);
+        reply = result.reply;
       }catch(err){
         reply = 'Maaf, ada kendala nyambungin ke server.';
       }
@@ -1376,7 +1471,7 @@
       saveCurrentChat();
 
       setCallState('speaking');
-      callStatus.textContent = 'Bombon AI ngomong...';
+      setCallStatusText('Bombon AI ngomong...');
       await speakAndWait(reply);
     }
   }
@@ -1387,6 +1482,9 @@
       return;
     }
     callActive = true;
+    callMuted = false;
+    callMuteBtn.classList.remove('muted');
+    callOverlay.classList.remove('minimized');
     callOverlay.classList.add('show');
     callLoop();
   });
@@ -1394,8 +1492,9 @@
     callActive = false;
     stopSpeaking();
     callOverlay.classList.remove('show');
+    callOverlay.classList.remove('minimized');
     setCallState('');
-    callStatus.textContent = 'Menghubungkan...';
+    setCallStatusText('Menghubungkan...');
   });
 </script>
 

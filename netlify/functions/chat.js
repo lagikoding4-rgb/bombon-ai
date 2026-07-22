@@ -193,31 +193,32 @@ async function callOpenRouterOnline(systemContent, userContent) {
       { role: 'system', content: systemContent },
       { role: 'user', content: userContent },
     ],
-    900
+    1500
   );
 }
 
 async function synthesizeVisionAnswerOnline(userQuestion, identification) {
-  const systemPrompt = `Kamu asisten yang menjawab pertanyaan tentang gambar dengan AKURAT dan berdasarkan FAKTA TERKINI dari internet.
+  const systemPrompt = `Kamu asisten serba bisa yang menjawab pertanyaan tentang gambar yang baru dikirim user.
 ATURAN:
 - Fokus jawaban HARUS ke gambar yang baru dikirim, JANGAN mengaitkan atau mencampur dengan topik obrolan sebelumnya.
-- Cari & pakai info terbaru dari web buat mastiin jawabanmu akurat (misal status/jabatan terkini suatu tokoh).
-- Kalau gak nemu info relevan, jujur aja bilang gak nemu, jangan mengarang.
-- Jawab singkat, jelas, langsung ke pertanyaan, gaya santai kayak chat biasa (gw-lu).`;
-  const userPrompt = `Hasil identifikasi visual gambar yang baru dikirim user: "${identification}"\n\nPertanyaan user: "${userQuestion}"\n\nCari info terbaru soal ini di internet kalau perlu, terus jawab pertanyaan user.`;
+- KALAU isi gambar berupa SOAL/PERTANYAAN/TUGAS (ujian, PR, kuis, dsb): kerjakan/jawab soalnya LANGSUNG pakai pengetahuan & penalaranmu sendiri, gak perlu nyari di internet buat soal umum kayak matematika/bahasa/sains dasar. Tulis jawaban lengkap tiap nomor.
+- KALAU pertanyaan user butuh fakta terkini (misal soal tokoh publik, jabatan, berita terbaru): cari & pakai info terbaru dari internet biar akurat.
+- Kalau gak nemu info relevan buat pertanyaan yang emang butuh fakta terkini, jujur aja bilang gak nemu, jangan mengarang.
+- Jawab jelas, langsung ke pertanyaan, gaya santai kayak chat biasa (gw-lu).`;
+  const userPrompt = `Hasil identifikasi/transkrip gambar yang baru dikirim user:\n${identification}\n\nPertanyaan/permintaan user: "${userQuestion}"\n\nJawab/kerjakan berdasarkan isi gambar di atas.`;
   return callOpenRouterOnline(systemPrompt, userPrompt);
 }
 
 async function synthesizeVisionAnswer(userQuestion, identification, searchResults) {
-  const systemPrompt = `Kamu asisten yang menjawab pertanyaan tentang gambar dengan AKURAT dan berdasarkan FAKTA TERKINI.
-Kamu akan diberi: (1) hasil identifikasi visual dari gambar, (2) hasil pencarian web terbaru terkait.
+  const systemPrompt = `Kamu asisten serba bisa yang menjawab pertanyaan tentang gambar yang baru dikirim user.
+Kamu akan diberi: (1) hasil identifikasi/transkrip dari gambar, (2) hasil pencarian web terbaru terkait (kalau ada/relevan).
 ATURAN:
-- Jawab HANYA berdasarkan data yang diberikan, jangan mengarang atau menebak.
 - Fokus jawaban HARUS ke gambar yang baru dikirim, JANGAN mengaitkan atau mencampur dengan topik obrolan sebelumnya.
-- Kalau data pencarian menyebutkan status/jabatan/fakta terkini yang berbeda dari asumsi umum, PRIORITASKAN data pencarian.
-- Kalau data pencarian tidak cukup atau tidak relevan, katakan dengan jujur bahwa informasi tidak ditemukan, jangan mengarang.
-- Jawab singkat, jelas, langsung ke pertanyaan user, gaya santai kayak chat biasa (gw-lu).`;
-  const userPrompt = `Pertanyaan user: "${userQuestion}"\n\nHasil identifikasi visual gambar:\n${identification}\n\nHasil pencarian web terbaru:\n${searchResults || '(tidak ada hasil relevan)'}\n\nJawab pertanyaan user berdasarkan data di atas.`;
+- KALAU isi gambar berupa SOAL/PERTANYAAN/TUGAS (ujian, PR, kuis, dsb): kerjakan/jawab soalnya LANGSUNG pakai pengetahuan & penalaranmu sendiri, gak perlu nunggu data pencarian buat soal umum kayak matematika/bahasa/sains dasar. Tulis jawaban lengkap tiap nomor.
+- KALAU pertanyaan butuh fakta terkini (tokoh publik, jabatan, berita terbaru) dan data pencarian menyebutkan info yang beda dari asumsi umum, PRIORITASKAN data pencarian itu.
+- Kalau data pencarian gak relevan/gak ada buat pertanyaan yang emang butuh fakta terkini, jujur aja bilang gak nemu, jangan mengarang.
+- Jawab jelas, langsung ke pertanyaan user, gaya santai kayak chat biasa (gw-lu).`;
+  const userPrompt = `Pertanyaan/permintaan user: "${userQuestion}"\n\nHasil identifikasi/transkrip gambar:\n${identification}\n\nHasil pencarian web terbaru (kalau relevan):\n${searchResults || '(tidak ada hasil relevan)'}\n\nJawab/kerjakan berdasarkan isi gambar di atas.`;
   return getChatReply(systemPrompt, [{ role: 'user', content: userPrompt }]);
 }
 
@@ -432,18 +433,18 @@ exports.handler = async (event) => {
 
   try {
     let reply;
+    let identification;
 
     if (image && image.data) {
       if (!process.env.GROQ_API_KEY && !process.env.GEMINI_API_KEY) {
         return { statusCode: 500, body: JSON.stringify({ error: 'Belum ada provider yang bisa analisis gambar (GROQ_API_KEY atau GEMINI_API_KEY).' }) };
       }
       const content = [
-        { type: 'text', text: 'PENTING: Abaikan topik atau percakapan sebelumnya sama sekali. Fokus HANYA pada gambar yang baru saja dikirim di pesan ini. Identifikasi secara singkat dan spesifik apa/siapa yang ada di gambar ini. Kalau ini tokoh publik, sejarah, tokoh terkenal, sebutkan nama lengkapnya dan konteksnya. Kalau ini objek/benda biasa, jelaskan singkat. Jangan menambahkan opini atau info status terkini, cukup identifikasi visualnya saja berdasarkan apa yang benar-benar terlihat di gambar.' },
+        { type: 'text', text: 'PENTING: Abaikan topik atau percakapan sebelumnya sama sekali. Fokus HANYA pada gambar yang baru saja dikirim di pesan ini.\n\nKALAU gambar ini berisi TEKS, SOAL, PERTANYAAN, TULISAN, atau DOKUMEN apapun (soal ujian, lembar kerja, screenshot chat, tabel, dsb): WAJIB tuliskan ulang (transkrip) SEMUA teks yang ada PERSIS seperti aslinya secara LENGKAP — termasuk semua nomor soal, pertanyaan, dan semua pilihan jawaban (A/B/C/D dst) kalau ada pilihan ganda. JANGAN cuma mendeskripsikan tampilan visualnya, transkrip teksnya secara utuh. Kalau ada beberapa soal, transkrip semuanya satu per satu.\n\nKALAU gambar ini BUKAN teks (foto orang/objek/tempat/pemandangan dsb): identifikasi secara singkat dan spesifik apa/siapa yang ada di gambar ini. Kalau tokoh publik/terkenal, sebutkan nama lengkap dan konteksnya. Jangan menambahkan opini atau info status terkini, cukup identifikasi visualnya berdasarkan apa yang benar-benar terlihat.' },
         { type: 'image_url', image_url: { url: `data:${image.mimeType};base64,${image.data}` } },
       ];
       const visionMessages = [{ role: 'user', content }];
       const visionErrors = [];
-      let identification;
       if (process.env.GROQ_API_KEY) {
         for (const model of VISION_MODEL_CANDIDATES) {
           try {
@@ -452,7 +453,7 @@ exports.handler = async (event) => {
               process.env.GROQ_API_KEY,
               model,
               visionMessages,
-              500
+              1500
             );
             break;
           } catch (e) {
@@ -525,7 +526,11 @@ exports.handler = async (event) => {
       return { statusCode: 502, body: JSON.stringify({ error: 'AI tidak memberikan respon yang valid.' }) };
     }
 
-    return { statusCode: 200, body: JSON.stringify({ reply }) };
+    const responseBody = { reply };
+    if (image && image.data && identification) {
+      responseBody.identification = identification;
+    }
+    return { statusCode: 200, body: JSON.stringify(responseBody) };
   } catch (err) {
     console.error('Chat error:', err.response?.status, err.response?.data || err.message);
     return {
