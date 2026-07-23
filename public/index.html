@@ -373,6 +373,9 @@
   .call-mini-mute.muted svg{ stroke:#e5484d; }
   .call-mini-end{ background:#e5484d; }
   .call-mini-end svg{ width:15px; height:15px; stroke:#fff; transform:rotate(135deg); }
+
+  /* ===================== NEW: search highlight ===================== */
+  .msg.search-highlight{ outline:2px solid var(--rose-bright); outline-offset:6px; border-radius:12px; }
 </style>
 </head>
 
@@ -462,12 +465,19 @@
           <button class="topbar-icon-btn call-btn" id="callBtn" title="Telepon Bombon AI">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
           </button>
-          <button class="topbar-icon-btn" id="downloadBtn" title="Unduh obrolan">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0l-4-4m4 4l4-4M4 20h16"/></svg>
-          </button>
-          <button class="topbar-icon-btn" id="shareBtn" title="Bagikan obrolan">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
-          </button>
+          <div class="attach-wrap">
+            <button class="topbar-icon-btn" id="chatMoreBtn" title="Opsi lain">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+            </button>
+            <div class="attach-menu chat-more-menu" id="chatMoreMenu">
+              <button id="chatShareOpt"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>Bagikan</button>
+              <button id="chatDownloadOpt"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13m0 0l-4-4m4 4l4-4M4 20h16"/></svg>Unduh</button>
+              <button id="chatPinOpt"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M8 3h8l-1 7 3 3H6l3-3-1-7z"/></svg><span id="chatPinLabel">Sematkan</span></button>
+              <button id="chatSearchOpt"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>Cari di chat</button>
+              <button id="chatArchiveOpt"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h18M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8M10 12h4"/></svg><span id="chatArchiveLabel">Arsipkan</span></button>
+              <button id="chatDeleteOpt" style="color:#e5484d;"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#e5484d"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/></svg>Hapus obrolan ini</button>
+            </div>
+          </div>
           <div class="model-pill">Bombon · Model Cepat</div>
         </div>
       </div>
@@ -1161,7 +1171,8 @@
 
   function renderHistoryList(){
     const list = document.getElementById('historyList');
-    const chats = loadChats();
+    const chats = loadChats().filter(c=>!c.archived);
+    chats.sort((a,b)=> (b.pinned?1:0) - (a.pinned?1:0));
     list.innerHTML = '';
 
     const newItem = document.createElement('div');
@@ -1173,7 +1184,8 @@
     chats.forEach(chat=>{
       const item = document.createElement('div');
       item.className = 'history-item' + (chat.id===currentChatId ? ' active' : '');
-      item.innerHTML = `<span class="history-title">${escapeHtml(chat.title)}</span>
+      const pinBadge = chat.pinned ? '📌 ' : '';
+      item.innerHTML = `<span class="history-title">${pinBadge}${escapeHtml(chat.title)}</span>
         <div class="history-actions">
           <button title="Ganti nama" data-act="rename">✎</button>
           <button title="Hapus" data-act="delete">🗑</button>
@@ -1238,7 +1250,41 @@
     return lines.join('\n');
   }
 
-  document.getElementById('downloadBtn').addEventListener('click', ()=>{
+  const chatMoreBtn = document.getElementById('chatMoreBtn');
+  const chatMoreMenu = document.getElementById('chatMoreMenu');
+  const chatPinLabel = document.getElementById('chatPinLabel');
+  const chatArchiveLabel = document.getElementById('chatArchiveLabel');
+
+  function currentChatMeta(){
+    if(!currentChatId) return null;
+    return loadChats().find(c=>c.id===currentChatId) || null;
+  }
+
+  chatMoreBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    const meta = currentChatMeta();
+    chatPinLabel.textContent = (meta && meta.pinned) ? 'Lepas sematan' : 'Sematkan';
+    chatArchiveLabel.textContent = (meta && meta.archived) ? 'Batal arsip' : 'Arsipkan';
+    chatMoreMenu.classList.toggle('show');
+  });
+  document.addEventListener('click', (e)=>{
+    if(!chatMoreMenu.contains(e.target) && e.target !== chatMoreBtn) chatMoreMenu.classList.remove('show');
+  });
+
+  document.getElementById('chatShareOpt').addEventListener('click', async ()=>{
+    chatMoreMenu.classList.remove('show');
+    const text = transcriptText();
+    if(!text.trim()){ alert('Belum ada obrolan buat dibagikan.'); return; }
+    if(navigator.share){
+      try{ await navigator.share({ title: 'Obrolan Bombon AI', text }); }catch(e){}
+    } else {
+      await navigator.clipboard.writeText(text);
+      alert('Obrolan disalin ke clipboard (share native gak didukung browser ini).');
+    }
+  });
+
+  document.getElementById('chatDownloadOpt').addEventListener('click', ()=>{
+    chatMoreMenu.classList.remove('show');
     const text = transcriptText();
     if(!text.trim()){ alert('Belum ada obrolan buat diunduh.'); return; }
     const blob = new Blob([text], { type: 'text/plain' });
@@ -1252,14 +1298,51 @@
     URL.revokeObjectURL(url);
   });
 
-  document.getElementById('shareBtn').addEventListener('click', async ()=>{
-    const text = transcriptText();
-    if(!text.trim()){ alert('Belum ada obrolan buat dibagikan.'); return; }
-    if(navigator.share){
-      try{ await navigator.share({ title: 'Obrolan Bombon AI', text }); }catch(e){}
-    } else {
-      await navigator.clipboard.writeText(text);
-      alert('Obrolan disalin ke clipboard (share native gak didukung browser ini).');
+  document.getElementById('chatPinOpt').addEventListener('click', ()=>{
+    chatMoreMenu.classList.remove('show');
+    if(!currentChatId){ alert('Obrolan ini belum kesimpen, kirim pesan dulu ya.'); return; }
+    const cs = loadChats();
+    const idx = cs.findIndex(c=>c.id===currentChatId);
+    if(idx>-1){
+      cs[idx].pinned = !cs[idx].pinned;
+      saveChats(cs);
+      renderHistoryList();
+    }
+  });
+
+  document.getElementById('chatSearchOpt').addEventListener('click', ()=>{
+    chatMoreMenu.classList.remove('show');
+    const q = prompt('Cari teks di obrolan ini:');
+    if(!q || !q.trim()) return;
+    const msgs = Array.from(chatInner.querySelectorAll('.msg'));
+    chatInner.querySelectorAll('.search-highlight').forEach(el=>{
+      el.classList.remove('search-highlight');
+    });
+    const found = msgs.filter(m => m.innerText.toLowerCase().includes(q.trim().toLowerCase()));
+    if(!found.length){ alert('Gak ketemu "' + q + '" di obrolan ini.'); return; }
+    found.forEach(m => m.classList.add('search-highlight'));
+    found[0].scrollIntoView({ behavior:'smooth', block:'center' });
+  });
+
+  document.getElementById('chatArchiveOpt').addEventListener('click', ()=>{
+    chatMoreMenu.classList.remove('show');
+    if(!currentChatId){ alert('Obrolan ini belum kesimpen, kirim pesan dulu ya.'); return; }
+    const cs = loadChats();
+    const idx = cs.findIndex(c=>c.id===currentChatId);
+    if(idx>-1){
+      cs[idx].archived = !cs[idx].archived;
+      saveChats(cs);
+      if(cs[idx].archived) startNewChat(); else renderHistoryList();
+    }
+  });
+
+  document.getElementById('chatDeleteOpt').addEventListener('click', ()=>{
+    chatMoreMenu.classList.remove('show');
+    if(!currentChatId){ alert('Belum ada obrolan buat dihapus.'); return; }
+    if(confirm('Hapus obrolan ini?')){
+      const cs = loadChats().filter(c=>c.id!==currentChatId);
+      saveChats(cs);
+      startNewChat();
     }
   });
 
@@ -1269,9 +1352,32 @@
       && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech);
   }
 
+  async function pickNativeVoiceIndex(){
+    try{
+      const { voices } = await window.Capacitor.Plugins.TextToSpeech.getSupportedVoices();
+      if(!voices || !voices.length) return undefined;
+      let idx = voices.findIndex(v => /^id(-|_|$)/i.test(v.lang||'') && /male|pria|laki/i.test(v.name||'') && !/female|wanita/i.test(v.name||''));
+      if(idx === -1) idx = voices.findIndex(v => /^id(-|_|$)/i.test(v.lang||''));
+      if(idx === -1) idx = voices.findIndex(v => /male|pria|laki/i.test(v.name||'') && !/female|wanita/i.test(v.name||''));
+      return idx === -1 ? undefined : idx;
+    }catch(e){ return undefined; }
+  }
+
   async function speakText(text){
     if(hasNativeTTS()){
-      await window.Capacitor.Plugins.TextToSpeech.speak({ text, lang: 'id-ID', rate: 1.0, pitch: 1.0, volume: 1.0 });
+      const TTS = window.Capacitor.Plugins.TextToSpeech;
+      const voiceIdx = await pickNativeVoiceIndex();
+      const baseParams = { text, rate: 0.95, pitch: 0.8, volume: 1.0 };
+      if(voiceIdx !== undefined) baseParams.voice = voiceIdx;
+      try{
+        await TTS.speak({ ...baseParams, lang: 'id-ID' });
+      }catch(e){
+        try{
+          await TTS.speak(baseParams);
+        }catch(e2){
+          console.error('TTS gagal total:', e2);
+        }
+      }
       return;
     }
     if(!window.speechSynthesis) throw new Error('Perangkat ini gak dukung text-to-speech.');
@@ -1279,6 +1385,12 @@
       window.speechSynthesis.cancel();
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = 'id-ID';
+      utter.pitch = 0.8;
+      utter.rate = 0.95;
+      const voices = window.speechSynthesis.getVoices();
+      const maleVoice = voices.find(v => /^id(-|_|$)/i.test(v.lang) && /male|pria|laki/i.test(v.name)) ||
+                         voices.find(v => /^id(-|_|$)/i.test(v.lang));
+      if(maleVoice) utter.voice = maleVoice;
       utter.onend = resolve;
       utter.onerror = resolve;
       window.speechSynthesis.speak(utter);
